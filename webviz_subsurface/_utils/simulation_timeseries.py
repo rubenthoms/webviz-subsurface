@@ -1,6 +1,6 @@
 import sys
 import warnings
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 import pandas as pd
@@ -48,15 +48,17 @@ def get_simulation_line_shape(
     return line_shape_fallback
 
 
-def calc_series_statistics(df: pd.DataFrame, vectors: list, refaxis: str = "DATE"):
+def calc_series_statistics(
+    df: pd.DataFrame, vectors: list, refaxis: str = "DATE"
+) -> pd.DataFrame:
     """Calculate statistics for given vectors over the ensembles
     refaxis is used if another column than DATE should be used to groupby.
     """
     # Invert p10 and p90 due to oil industry convention.
-    def p10(x):
+    def p10(x: List[float]) -> List[float]:
         return np.nanpercentile(x, q=90)
 
-    def p90(x):
+    def p90(x: List[float]) -> List[float]:
         return np.nanpercentile(x, q=10)
 
     # Calculate statistics, ignoring NaNs.
@@ -87,7 +89,7 @@ def add_fanchart_traces(
     line_shape: str,
     refaxis: str = "DATE",
     hovertemplate: str = "(%{x}, %{y})<br>",
-):
+) -> List[Dict[str, Any]]:
     """Renders a fanchart for an ensemble vector"""
     fill_color = hex_to_rgba(color, 0.3)
     line_color = hex_to_rgba(color, 1)
@@ -153,7 +155,7 @@ def add_fanchart_traces(
     ]
 
 
-def render_hovertemplate(vector: str, interval: Optional[str]):
+def render_hovertemplate(vector: str, interval: Optional[str]) -> str:
     if vector.startswith(("AVG_", "INTVL_")) and interval is not None:
         if interval == "daily":
             return "(%{x|%b} %{x|%-d}, %{x|%Y}, %{y})<br>"
@@ -190,7 +192,7 @@ def date_to_interval_conversion(
 
 
 # pylint: disable=too-many-branches
-def check_and_format_observations(obsfile: Path):
+def check_and_format_observations(obsfile: Path) -> dict:
     with open(obsfile, "r") as stream:
         try:
             obsfile_data = yaml.safe_load(stream)
@@ -217,7 +219,7 @@ def check_and_format_observations(obsfile: Path):
                 "The observation file lacks a `smry` section, which is mandatory for observations "
                 "to work with this plugin."
             ) from exc
-        except TypeError:
+        except TypeError as exc:
             raise TypeError(
                 "The observation file's othermost level must be a dictionary, while the input "
                 f"file's outermost level is of type {type(obslist)}."
