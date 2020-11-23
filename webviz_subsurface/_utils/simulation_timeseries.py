@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import yaml
 from webviz_config.utils import terminal_colors
+from .._utils.colors import hex_to_rgba
 
 
 def set_simulation_line_shape_fallback(line_shape_fallback: str) -> str:
@@ -88,8 +89,8 @@ def add_fanchart_traces(
     hovertemplate: str = "(%{x}, %{y})<br>",
 ):
     """Renders a fanchart for an ensemble vector"""
-    fill_color = hex_to_rgb(color, 0.3)
-    line_color = hex_to_rgb(color, 1)
+    fill_color = hex_to_rgba(color, 0.3)
+    line_color = hex_to_rgba(color, 1)
     return [
         {
             "name": legend_group,
@@ -150,15 +151,6 @@ def add_fanchart_traces(
             "showlegend": False,
         },
     ]
-
-
-def hex_to_rgb(hex_string, opacity=1):
-    """Converts a hex color to rgb"""
-    hex_string = hex_string.lstrip("#")
-    hlen = len(hex_string)
-    rgb = [int(hex_string[i : i + hlen // 3], 16) for i in range(0, hlen, hlen // 3)]
-    rgb.append(opacity)
-    return f"rgba{tuple(rgb)}"
 
 
 def render_hovertemplate(vector: str, interval: Optional[str]):
