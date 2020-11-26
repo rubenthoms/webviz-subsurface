@@ -1,6 +1,7 @@
 import numpy.ma as ma
 import numpy as np
 from plotly.subplots import make_subplots
+from .._utils.colors import hex_to_rgba
 
 
 class XSectionFigure:
@@ -429,8 +430,8 @@ class XSectionFigure:
         color = self._surfacecolors[
             self._surfacenames.index(name) % len(self._surfacecolors)
         ]
-        fill_color = hex_to_rgb(color, 0.3)
-        line_color = hex_to_rgb(color, 1)
+        fill_color = hex_to_rgba(color, 0.3)
+        line_color = hex_to_rgba(color, 1)
 
         # Extract surface values along well fence
         x_values = statistical_surfaces["mean"].get_randomline(self.fence).copy()[:, 0]
@@ -531,12 +532,3 @@ class XSectionFigure:
             self.main_trace_row,
             1,
         )
-
-
-def hex_to_rgb(hex_string, opacity=1):
-    """Converts a hex color to rgb"""
-    hex_string = hex_string.lstrip("#")
-    hlen = len(hex_string)
-    rgb = [int(hex_string[i : i + hlen // 3], 16) for i in range(0, hlen, hlen // 3)]
-    rgb.append(opacity)
-    return f"rgba{tuple(rgb)}"

@@ -1,15 +1,6 @@
 from typing import Tuple
 
 
-def hex_to_rgb(hex_string: str, opacity: float = 1) -> str:
-    """Converts a hex color to rgb"""
-    hex_string = hex_string.lstrip("#")
-    hlen = len(hex_string)
-    rgb = [int(hex_string[i : i + hlen // 3], 16) for i in range(0, hlen, hlen // 3)]
-    rgb.append(opacity)
-    return f"rgba{tuple(rgb)}"
-
-
 def find_intermediate_color(
     lowcolor: str, highcolor: str, intermed: float, colortype: str = "tuple"
 ) -> str:

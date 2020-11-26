@@ -11,7 +11,7 @@ from webviz_subsurface._utils.simulation_timeseries import (
     set_simulation_line_shape_fallback,
     get_simulation_line_shape,
 )
-from ..utils.colors import hex_to_rgb
+from webviz_subsurface._utils.colors import hex_to_rgba
 
 
 class SimulationTimeSeriesModel:
@@ -254,8 +254,8 @@ def add_fanchart_traces(
 ) -> list:
     """Renders a fanchart for an ensemble vector"""
 
-    fill_color = hex_to_rgb(color, 0.3)
-    line_color = hex_to_rgb(color, 1)
+    fill_color = hex_to_rgba(color, 0.3)
+    line_color = hex_to_rgba(color, 1)
     return [
         {
             "name": legend_group,
