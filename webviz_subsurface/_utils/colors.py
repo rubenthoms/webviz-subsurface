@@ -1,6 +1,3 @@
-from typing import Tuple, Union
-
-
 def hex_to_rgba(hex_string: str, opacity: float = 1.0) -> str:
     """Converts the given hex color to rgba"""
     hex_string = hex_string.lstrip("#")
