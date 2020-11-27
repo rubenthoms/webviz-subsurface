@@ -58,7 +58,7 @@ def si_prefixed(
      'M' (mega)) or an integer which is the base 10 exponent (e.g. 3 for kilo, -3 for milli).
     """
 
-    def number_formatter(number_base: float, si_prefix: str):
+    def number_formatter(number_base: float, si_prefix: str) -> str:
         return (
             f"{number_base:{number_format}} {si_prefix}{unit}"
             if spaced
