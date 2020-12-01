@@ -8,50 +8,41 @@ from webviz_config.webviz_assets import WEBVIZ_ASSETS
 import webviz_subsurface
 from webviz_subsurface._models import EnsembleSetModel
 from .views import main_view
-from .models import PropertyStatisticsModel, SimulationTimeSeriesModel
+from .models import ParametersModel, SimulationTimeSeriesModel
 from .controllers import (
-    property_qc_controller,
-    property_delta_controller,
-    property_response_controller,
+    parameter_qc_controller,
+    parameter_response_controller,
 )
-from .utils.surface import surface_store
 from .data_loaders import read_csv
 
 
-class PropertyStatistics(WebvizPluginABC):
-    """This plugin visualizes ensemble statistics calculated from grid properties.
+class ParameterAnalysis(WebvizPluginABC):
+    """This plugin visualizes parameter distributions and statistics. /
+    for FMU ensembles, and can be used to investigate parameter correlations /
+    on reservoir simulation time series data.
 
 ---
-**The main input to this plugin is property statistics extracted from grid models.
-See the documentation in [fmu-tools](http://fmu-docs.equinor.com/) on how to generate this data.
-Additional data includes UNSMRY data and optionally irap binary surfaces stored in standardized \
-FMU format.
 
 **Input data can be provided in two ways: Aggregated or read from ensembles stored on scratch.**
 
 **Using aggregated data**
-* **`csvfile_smry`:** Aggregated `csv` file for volumes with `REAL`, `ENSEMBLE`, `DATE` and \
-    vector columns (absolute path or relative to config file).
-* **`csvfile_statistics`:** Aggregated `csv` file for property statistics. See the \
-    documentation in [fmu-tools](http://fmu-docs.equinor.com/) on how to generate this data.
+* **`csvfile_parameters`:** Aggregated `csv` file with `REAL`, `ENSEMBLE` and parameter columns. \
+    (absolute path or relative to config file).
+* **`csvfile_smry`:** (Optional) Aggregated `csv` file for volumes with `REAL`, `ENSEMBLE`, `DATE` \
+    and vector columns (absolute path or relative to config file).
 
 **Using raw ensemble data stored in realization folders**
 * **`ensembles`:** Which ensembles in `shared_settings` to visualize.
-* **`statistic_file`:** Csv file for each realization with property statistics.
 * **`column_keys`:** List of vectors to extract. If not given, all vectors \
     from the simulations will be extracted. Wild card asterisk `*` can be used.
 * **`time_index`:** Time separation between extracted values. Can be e.g. `monthly` (default) or \
     `yearly`.
-* **`surface_renaming`:** Optional dictionary to rename properties/zones to match filenames \
-    stored on FMU standardized format (zone--property.gri)
+
+**Common settings for all input options**
+* **`drop_constants`:** Bool used to determine if constant parameters should be dropped. \
+    Default is True.
 
 ---
-
-?> Folders with statistical surfaces are assumed located at \
-`<ensemble_path>/share/results/maps/<ensemble>/<statistic>` where `statistic` are subfolders \
-with statistical calculation: `mean`, `stddev`, `p10`, `p90`, `min`, `max`.
-
-!> Surface data is currently not available when using aggregated files.
 
 !> For smry data it is **strongly recommended** to keep the data frequency to a regular frequency \
 (like `monthly` or `yearly`). This applies to both csv input and when reading from `UNSMRY` \
@@ -59,23 +50,23 @@ with statistical calculation: `mean`, `stddev`, `p10`, `p90`, `min`, `max`.
 per DATE over all realizations in an ensemble, and the available dates should therefore not \
 differ between individual realizations of an ensemble.
 
-
-**Using aggregated data**
-
+?> Vectors that are identified as historical vectors (e.g. FOPTH is the history of FOPT) will \
+be plotted together with their non-historical counterparts as reference lines.
 
 **Using simulation time series data directly from `.UNSMRY` files**
 
-Time series data are extracted automatically from the `UNSMRY` files in the individual
-realizations, using the `fmu-ensemble` library.
-
-?> Using the `UNSMRY` method will also extract metadata like units, and whether the vector is a \
-rate, a cumulative, or historical. Units are e.g. added to the plot titles, while rates and \
-cumulatives are used to decide the line shapes in the plot. Aggregated data may on the other \
-speed up the build of the app, as processing of `UNSMRY` files can be slow for large models.
+!> Parameter values are extracted automatically from the `parameters.txt` files in the individual
+realizations if you have defined `ensembles`, using the `fmu-ensemble` library.
 
 !> The `UNSMRY` files are auto-detected by `fmu-ensemble` in the `eclipse/model` folder of the \
 individual realizations. You should therefore not have more than one `UNSMRY` file in this \
 folder, to avoid risk of not extracting the right data.
+
+**Using aggregated data**
+
+?> Aggregated data may speed up the build of the app, as processing of `UNSMRY` files can be \
+slow for large models.
+
 """
 
     # pylint: disable=too-many-arguments
@@ -83,12 +74,11 @@ folder, to avoid risk of not extracting the right data.
         self,
         app,
         ensembles: Optional[list] = None,
-        statistics_file: str = "share/results/tables/gridpropstatistics.csv",
-        csvfile_statistics: pathlib.Path = None,
+        csvfile_parameters: pathlib.Path = None,
         csvfile_smry: pathlib.Path = None,
-        surface_renaming: Optional[dict] = None,
         time_index: str = "monthly",
         column_keys: Optional[list] = None,
+        drop_constants: bool = True,
     ):
         super().__init__()
         WEBVIZ_ASSETS.add(
@@ -100,9 +90,8 @@ folder, to avoid risk of not extracting the right data.
         self.theme = app.webviz_settings["theme"]
         self.time_index = time_index
         self.column_keys = column_keys
-        self.statistics_file = statistics_file
         self.ensembles = ensembles
-        self.csvfile_statistics = csvfile_statistics
+        self.csvfile_parameters = csvfile_parameters
         self.csvfile_smry = csvfile_smry
 
         if ensembles is not None:
@@ -114,9 +103,10 @@ folder, to avoid risk of not extracting the right data.
                     for ens in ensembles
                 }
             )
-            self.pmodel = PropertyStatisticsModel(
-                dataframe=self.emodel.load_csv(csv_file=self.statistics_file),
+            self.pmodel = ParametersModel(
+                dataframe=self.emodel.load_parameters(),
                 theme=self.theme,
+                drop_constants=drop_constants,
             )
             self.vmodel = SimulationTimeSeriesModel(
                 dataframe=self.emodel.load_smry(
@@ -124,20 +114,21 @@ folder, to avoid risk of not extracting the right data.
                 ),
                 theme=self.theme,
             )
-            self.surface_folders = {
-                ens: folder / "share" / "results" / "maps" / ens
-                for ens, folder in self.emodel.ens_folders.items()
-            }
-        else:
-            self.pmodel = PropertyStatisticsModel(
-                dataframe=read_csv(csvfile_statistics), theme=self.theme
-            )
-            self.vmodel = SimulationTimeSeriesModel(
-                dataframe=read_csv(csvfile_smry), theme=self.theme.plotly_theme
-            )
-            self.surface_folders = None
 
-        self.surface_renaming = surface_renaming if surface_renaming else {}
+        elif self.csvfile_parameters is None:
+            raise ValueError("Either ensembles or csvfile_parameters must be specified")
+        else:
+            self.pmodel = ParametersModel(
+                dataframe=read_csv(csvfile_parameters),
+                theme=self.theme,
+                drop_constants=drop_constants,
+            )
+            if self.csvfile_smry is not None:
+                self.vmodel = SimulationTimeSeriesModel(
+                    dataframe=read_csv(csvfile_smry), theme=self.theme.plotly_theme
+                )
+            else:
+                self.vmodel = None
 
         self.set_callbacks(app)
 
@@ -146,10 +137,9 @@ folder, to avoid risk of not extracting the right data.
         return main_view(parent=self)
 
     def set_callbacks(self, app) -> None:
-        property_qc_controller(self, app)
-        if len(self.pmodel.ensembles) > 1:
-            property_delta_controller(self, app)
-        property_response_controller(self, app)
+        parameter_qc_controller(self, app)
+        if self.vmodel is not None:
+            parameter_response_controller(self, app)
 
     def add_webvizstore(self):
         store = []
@@ -160,11 +150,18 @@ folder, to avoid risk of not extracting the right data.
                 (
                     read_csv,
                     [
-                        {"csv_file": self.csvfile_smry},
-                        {"csv_file": self.csvfile_statistics},
+                        {"csv_file": self.csvfile_parameters},
                     ],
                 )
             )
-        if self.surface_folders is not None:
-            store.extend(surface_store(parent=self))
+            if self.csvfile_smry is not None:
+                store.extend(
+                    (
+                        read_csv,
+                        [
+                            {"csv_file": self.csvfile_smry},
+                        ],
+                    )
+                )
+
         return store
