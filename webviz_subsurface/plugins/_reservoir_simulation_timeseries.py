@@ -722,7 +722,7 @@ folder, to avoid risk of not extracting the right data.
                     vector=vector, smry_meta=self.smry_meta
                 )
                 if (
-                    historical_vector_name is not None
+                    historical_vector_name
                     and historical_vector_name in dfs[vector]["data"].columns
                 ):
                     traces.append(
@@ -1000,7 +1000,7 @@ def filter_df(
     vector if present"""
     columns = ["REAL", "ENSEMBLE", "DATE", vector]
     historical_vector_name = historical_vector(vector=vector, smry_meta=smry_meta)
-    if historical_vector_name is not None and historical_vector_name in df.columns:
+    if historical_vector_name and historical_vector_name in df.columns:
         columns.append(historical_vector_name)
     return df.loc[df["ENSEMBLE"].isin(ensembles)][columns]
 
