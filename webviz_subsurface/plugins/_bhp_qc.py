@@ -11,6 +11,7 @@ from webviz_config import WebvizPluginABC
 
 from webviz_subsurface._models import EnsembleSetModel
 from .._utils.unique_theming import unique_colors
+from .._utils.colors import hex_to_rgba
 
 
 class BhpQc(WebvizPluginABC):
@@ -390,8 +391,8 @@ def add_fanchart_traces(
 ):
     """Renders a fanchart for an ensemble vector"""
 
-    fill_color = hex_to_rgb(color, 0.3)
-    line_color = hex_to_rgb(color, 1)
+    fill_color = hex_to_rgba(color, 0.3)
+    line_color = hex_to_rgba(color, 1)
     x = [vec[5:] for vec in ens_stat_df.index]
 
     return [
@@ -454,12 +455,3 @@ def add_fanchart_traces(
             "showlegend": False,
         },
     ]
-
-
-def hex_to_rgb(hex_string, opacity=1):
-    """Converts a hex color to rgb"""
-    hex_string = hex_string.lstrip("#")
-    hlen = len(hex_string)
-    rgb = [int(hex_string[i : i + hlen // 3], 16) for i in range(0, hlen, hlen // 3)]
-    rgb.append(opacity)
-    return f"rgba{tuple(rgb)}"

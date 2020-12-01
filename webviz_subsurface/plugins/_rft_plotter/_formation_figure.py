@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 
 from ._processing import interpolate_depth, filter_frame
+from ..._utils.colors import hex_to_rgba
 
 
 class FormationFigure:
@@ -274,8 +275,8 @@ class FormationFigure:
 
 def add_fanchart_traces(vector_stats, color, legend_group: str):
     """Renders a fanchart for an ensemble vector"""
-    fill_color = hex_to_rgb(color, 0.3)
-    line_color = hex_to_rgb(color, 1)
+    fill_color = hex_to_rgba(color, 0.3)
+    line_color = hex_to_rgba(color, 1)
     return [
         {
             "name": legend_group,
@@ -336,12 +337,3 @@ def add_fanchart_traces(vector_stats, color, legend_group: str):
             "showlegend": False,
         },
     ]
-
-
-def hex_to_rgb(hex_string, opacity=1):
-    """Converts a hex color to rgb"""
-    hex_string = hex_string.lstrip("#")
-    hlen = len(hex_string)
-    rgb = [int(hex_string[i : i + hlen // 3], 16) for i in range(0, hlen, hlen // 3)]
-    rgb.append(opacity)
-    return f"rgba{tuple(rgb)}"
