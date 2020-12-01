@@ -2,7 +2,7 @@ import math
 import json
 import pathlib
 import warnings
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 
 
 _DATA_PATH = pathlib.Path(__file__).parent.absolute() / "abbreviation_data"
@@ -10,7 +10,7 @@ _DATA_PATH = pathlib.Path(__file__).parent.absolute() / "abbreviation_data"
 SI_PREFIXES = json.loads((_DATA_PATH / "si_prefixes.json").read_text())
 
 
-def table_statistics_base() -> List[tuple]:
+def table_statistics_base() -> List[Tuple[str, dict]]:
     return [
         (
             i,

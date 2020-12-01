@@ -138,7 +138,7 @@ class XSectionFigure:
 
     def plot_well(
         self,
-        zonelogname: str = "ZONELOG",
+        zonelogname: Optional[str] = "ZONELOG",
         facieslogname: Optional[str] = None,
         marginal_log: Optional[str] = None,
         zonemin: int = 0,
