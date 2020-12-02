@@ -650,7 +650,7 @@ folder, to avoid risk of not extracting the right data.
             )
 
         @app.callback(
-            [
+            [  # type: ignore
                 Output(self.uuid("graph"), "figure"),
                 Output(self.uuid("date_view_wrapper"), "children"),
                 Output(self.uuid("ref_vec"), "data"),
@@ -659,9 +659,9 @@ folder, to avoid risk of not extracting the right data.
             + [Input({"page": self.uuid("selectors"), "value": ALL}, "value")],
             [State(self.uuid("fip"), "value")],
         )  # pylint: disable=too-many-locals
-        def _render_charts(date: str, _: Any, fip_array: str):  # type: ignore
+        def _render_charts(date: str, _: Any, fip_array: str):
             # TODO(Sigurd) Currently giving up on deciding on the return type for
-            # _render_charts() above. Some of the mypy erros indicate that there
+            # _render_charts() above. Some of the mypy errors indicate that there
             # are some errors in the structure of the return values of this function
             inputs = dash.callback_context.inputs
             date = json.loads(inputs.pop(f"{self.uuid('date')}.data"))

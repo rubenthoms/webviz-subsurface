@@ -396,7 +396,7 @@ but the following responses are given more descriptive names automatically:
 
     def set_callbacks(self, app: dash.Dash) -> None:
         @app.callback(
-            [
+            [  # type: ignore
                 Output(self.ids("graph"), "figure"),
                 Output(self.ids("table"), "data"),
                 Output(self.ids("table"), "columns"),
@@ -406,7 +406,7 @@ but the following responses are given more descriptive names automatically:
         )
         # TODO(Sigurd) Doesn't seem to make sense with type hints
         # here unless all args are of same type
-        def _render_vol_chart(*args) -> Tuple[dict, list, List[dict], str]:  # type: ignore[no-untyped-def] # pylint: disable=line-too-long
+        def _render_vol_chart(*args):
             """Renders a volume visualization either as a Plotly Graph or
             as a Dash table object.
             The arguments are given by the vol_callback_inputs property
