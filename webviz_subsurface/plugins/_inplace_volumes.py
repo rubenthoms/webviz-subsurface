@@ -404,8 +404,9 @@ but the following responses are given more descriptive names automatically:
             ],
             self.vol_callback_inputs,
         )
-        # TODO(Sigurd) Doesn't seem to make sense with type hints here unless all args are of same type
-        def _render_vol_chart(*args) -> Tuple[dict, list, List[dict], str]:  # type: ignore[no-untyped-def]
+        # TODO(Sigurd) Doesn't seem to make sense with type hints
+        # here unless all args are of same type
+        def _render_vol_chart(*args) -> Tuple[dict, list, List[dict], str]:  # type: ignore[no-untyped-def] # pylint: disable=line-too-long
             """Renders a volume visualization either as a Plotly Graph or
             as a Dash table object.
             The arguments are given by the vol_callback_inputs property
@@ -417,6 +418,7 @@ but the following responses are given more descriptive names automatically:
             Return:
                 Plotly Graph/dash_table.DataTable
             """
+            # pylint: disable=line-too-long
             # TODO(Sigurd) Tricky to figure out the type hints without a bit of guesswork here due to the use of *args
             # The reasoning below is:
             #   response:   ids("response")  dcc.Dropdown(multi=False, clearable=False) => str

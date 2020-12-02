@@ -590,7 +590,8 @@ Valid options for `color` are `viridis` (default), `inferno`, `warm`, `cool` and
             # These two are presumably of type dict, but the type depends on the actual python
             # objects that get serialized inside SurfaceSelector.
             # Should deserialization and validation be delegated to SurfaceSelector?
-            # Note that according to the doc, it seems that dcc.Store actualy does the serialization/deserialization for us!
+            # Note that according to the doc, it seems that dcc.Store actualy does the
+            # serialization/deserialization for us!
             # Should be refactored
             data: dict = json.loads(stored_selector_data)
             data2: dict = json.loads(stored_selector2_data)

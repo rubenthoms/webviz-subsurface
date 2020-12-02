@@ -1,5 +1,4 @@
 # pylint: disable=too-many-lines
-import os
 import io
 import json
 from uuid import uuid4

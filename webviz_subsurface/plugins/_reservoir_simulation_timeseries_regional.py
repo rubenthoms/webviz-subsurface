@@ -660,9 +660,9 @@ folder, to avoid risk of not extracting the right data.
             [State(self.uuid("fip"), "value")],
         )  # pylint: disable=too-many-locals
         def _render_charts(date: str, _: Any, fip_array: str):  # type: ignore
-            # TODO(Sigurd)
-            # Currently giving up on deciding on the return type for _render_charts() above
-            # Some of the mypy erros indicate that there are some errors in the structure of the return values of this function
+            # TODO(Sigurd) Currently giving up on deciding on the return type for
+            # _render_charts() above. Some of the mypy erros indicate that there
+            # are some errors in the structure of the return values of this function
             inputs = dash.callback_context.inputs
             date = json.loads(inputs.pop(f"{self.uuid('date')}.data"))
             ensembles = inputs.pop(self.selectors_context_string("ensemble", "value"))
@@ -1000,8 +1000,9 @@ def render_single_date_graph(
                 }
             )
 
-    # TODO(Sigurd) What is the type for theme variable here
-    # Probably the assumption is that theme is of type WebvizConfigTheme but how should this type be propagated to the plugins?
+    # TODO(Sigurd) What is the type for theme variable here?
+    # Probably the assumption is that theme is of type WebvizConfigTheme but how should this
+    # type be propagated to the plugins?
     return wcc.Graph(
         figure={"data": traces, "layout": theme.create_themed_layout(layout)}  # type: ignore
     )

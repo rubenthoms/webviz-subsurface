@@ -1,6 +1,6 @@
 from uuid import uuid4
 from pathlib import Path
-from typing import Callable, List, Tuple, Dict
+from typing import Callable, List, Tuple
 import pandas as pd
 
 import dash

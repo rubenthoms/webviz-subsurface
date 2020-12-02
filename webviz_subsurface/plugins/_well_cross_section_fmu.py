@@ -471,18 +471,17 @@ e.g. [xtgeo](https://xtgeo.readthedocs.io/en/latest/).
         ) -> Tuple[dict, List[List[float]]]:
             """Update cross section"""
 
-            # TODO(Sigurd)
-            # According to dcc.Dropdown doc, surfacename should always be of type List[str] since multi=True
+            # TODO(Sigurd) According to dcc.Dropdown doc, surfacename should always be of
+            # type List[str] since multi=True
             if not isinstance(surfacenames, list):
                 raise TypeError("surfacenames must be of type list")
 
-            # TODO(Sigurd)
-            # Can we prohibit clearing of the sampling and nextend input fields (dcc.Input) in the client?
-            # Until we can, we must guard against sampling and nextend being None.
-            # This happens when the user clears the input field and we have not yet
-            # found a solution that prohibits the input field from being cleared.
-            # The situation can be slightly remedied by setting required=True which will highlight the
-            # missing value with a red rectangle.
+            # TODO(Sigurd) Can we prohibit clearing of the sampling and nextend input
+            # fields (dcc.Input) in the client? Until we can, we must guard against sampling
+            # and nextend being None. This happens when the user clears the input field and we
+            # have not yet found a solution that prohibits the input field from being cleared.
+            # The situation can be slightly remedied by setting required=True which will highlight
+            # the missing value with a red rectangle.
             if sampling is None or nextend is None:
                 raise PreventUpdate
 
@@ -550,9 +549,8 @@ e.g. [xtgeo](https://xtgeo.readthedocs.io/en/latest/).
             if nclicks % 2:
                 style["visibility"] = "visible"
                 return style, "Hide Map"
-            else:
-                style["visibility"] = "hidden"
-                return style, "Show map"
+            style["visibility"] = "hidden"
+            return style, "Show map"
 
         @app.callback(
             Output(self.ids("map"), "layers"),

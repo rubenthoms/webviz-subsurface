@@ -570,6 +570,7 @@ def render_parcoord(
 @CACHE.memoize(timeout=CACHE.TIMEOUT)
 @webvizstore
 # pylint: disable=too-many-locals
+# pylint: disable=too-many-statements
 def make_status_df(
     ens_paths: dict,
     status_file: str,
