@@ -1,12 +1,15 @@
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 import dash_html_components as html
 import dash_core_components as dcc
 import webviz_core_components as wcc
 
+if TYPE_CHECKING:
+    from .. import PropertyStatistics
+
 
 def ensemble_selector(
-    parent, tab: str, multi: bool = False, value: str = None
+    parent: "PropertyStatistics", tab: str, multi: bool = False, value: str = None
 ) -> html.Div:
     return html.Div(
         style={"width": "75%"},
@@ -27,7 +30,9 @@ def ensemble_selector(
     )
 
 
-def delta_ensemble_selector(parent, tab: str, multi: bool = False) -> html.Div:
+def delta_ensemble_selector(
+    parent: "PropertyStatistics", tab: str, multi: bool = False
+) -> html.Div:
     return html.Div(
         style={"width": "75%"},
         children=[
@@ -48,7 +53,7 @@ def delta_ensemble_selector(parent, tab: str, multi: bool = False) -> html.Div:
 
 
 def property_selector(
-    parent, tab: str, multi: bool = False, value: str = None
+    parent: "PropertyStatistics", tab: str, multi: bool = False, value: str = None
 ) -> html.Div:
     display = "none" if len(parent.pmodel.properties) < 2 else "inline"
     return html.Div(
@@ -71,7 +76,7 @@ def property_selector(
 
 
 def source_selector(
-    parent, tab: str, multi: bool = False, value: str = None
+    parent: "PropertyStatistics", tab: str, multi: bool = False, value: str = None
 ) -> html.Div:
     display = "none" if len(parent.pmodel.sources) < 2 else "inline"
     return html.Div(
@@ -95,7 +100,7 @@ def source_selector(
 
 
 def make_filter(
-    parent,
+    parent: "PropertyStatistics",
     tab: str,
     df_column: str,
     column_values: list,
@@ -127,7 +132,7 @@ def make_filter(
 
 
 def filter_selector(
-    parent,
+    parent: "PropertyStatistics",
     tab: str,
     multi: bool = True,
     value: Union[str, float] = None,

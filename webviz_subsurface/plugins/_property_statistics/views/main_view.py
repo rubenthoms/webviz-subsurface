@@ -1,12 +1,18 @@
+from typing import TYPE_CHECKING
+
 import dash_html_components as html
 import dash_core_components as dcc
+import webviz_core_components as wcc
 
 from .property_qc_view import property_qc_view
 from .property_delta_view import property_delta_view
 from .property_response_view import property_response_view
 
+if TYPE_CHECKING:
+    from .. import PropertyStatistics
 
-def main_view(parent) -> dcc.Tabs:
+
+def main_view(parent: "PropertyStatistics") -> dcc.Tabs:
     tabs = [
         make_tab(
             label="Property QC",
@@ -37,7 +43,7 @@ def main_view(parent) -> dcc.Tabs:
     )
 
 
-def make_tab(label, children):
+def make_tab(label: str, children: wcc.FlexBox) -> dcc.Tab:
     tab_style = {
         "borderBottom": "1px solid #d6d6d6",
         "padding": "6px",

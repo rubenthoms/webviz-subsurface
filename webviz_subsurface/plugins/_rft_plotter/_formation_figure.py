@@ -1,3 +1,5 @@
+from typing import List, Optional, Dict, Any
+
 import pandas as pd
 import numpy as np
 
@@ -9,15 +11,15 @@ class FormationFigure:
     # pylint: disable=too-many-arguments
     def __init__(
         self,
-        well,
-        ertdf,
-        enscolors,
-        depth_option,
-        date,
-        ensembles,
-        simdf=None,
-        obsdf=None,
-    ):
+        well: str,
+        ertdf: pd.DataFrame,
+        enscolors: dict,
+        depth_option: str,
+        date: str,
+        ensembles: List[str],
+        simdf: Optional[pd.DataFrame] = None,
+        obsdf: Optional[pd.DataFrame] = None,
+    ) -> None:
         self.well = well
         self.simdf = (
             filter_frame(simdf, {"WELL": well, "DATE": date, "ENSEMBLE": ensembles})
@@ -36,7 +38,7 @@ class FormationFigure:
         self.enscolors = enscolors
         self.set_depth_columns()
 
-        self.traces = []
+        self.traces: List[Dict[str, Any]] = []
         self._layout = {
             "yaxis": {"autorange": "reversed", "title": "Depth", "showgrid": False},
             "xaxis": {
@@ -55,16 +57,16 @@ class FormationFigure:
         }
 
     @property
-    def layout(self):
+    def layout(self) -> Dict[str, Any]:
         return self._layout
 
     @property
-    def xaxis_extension(self):
+    def xaxis_extension(self) -> float:
         min_x, max_x = self.pressure_range
         return (max_x - min_x) * 0.5
 
     @property
-    def pressure_range(self):
+    def pressure_range(self) -> List[float]:
         min_sim = (
             self.ertdf["SIMULATED"].min()
             if self.use_ertdf
@@ -90,7 +92,7 @@ class FormationFigure:
         ]
 
     @property
-    def simdf_has_md(self):
+    def simdf_has_md(self) -> bool:
         if (
             self.simdf is not None
             and "CONMD" in self.simdf
@@ -100,12 +102,12 @@ class FormationFigure:
         return False
 
     @property
-    def use_ertdf(self):
+    def use_ertdf(self) -> bool:
         return self.simdf is None or (
             self.depth_option == "MD" and not self.simdf_has_md
         )
 
-    def set_depth_columns(self):
+    def set_depth_columns(self) -> None:
         """Set depth columns (md vs tvd)"""
         self.ertdf["DEPTH"] = self.ertdf["TVD"]
 
@@ -116,7 +118,7 @@ class FormationFigure:
             if self.obsdf is not None and "MD" in self.obsdf:
                 self.obsdf["DEPTH"] = self.obsdf["MD"]
 
-    def add_formation(self, df):
+    def add_formation(self, df: pd.DataFrame) -> None:
         """Plot zonation"""
         formation_names = []
         formation_colors = [
@@ -171,7 +173,7 @@ class FormationFigure:
             )
         self._layout.update({"shapes": formation_names})
 
-    def add_additional_observations(self):
+    def add_additional_observations(self) -> None:
         if self.obsdf is not None:
             self.traces.append(
                 {
@@ -184,7 +186,7 @@ class FormationFigure:
                 }
             )
 
-    def add_ert_observed(self):
+    def add_ert_observed(self) -> None:
         df = self.ertdf.copy()
         df = filter_frame(
             df,
@@ -213,7 +215,7 @@ class FormationFigure:
             }
         )
 
-    def add_simulated_lines(self, linetype):
+    def add_simulated_lines(self, linetype: str) -> None:
         if self.use_ertdf:
             for ensemble, ensdf in self.ertdf.groupby("ENSEMBLE"):
                 self.traces.append(
@@ -273,7 +275,9 @@ class FormationFigure:
                     )
 
 
-def add_fanchart_traces(vector_stats, color, legend_group: str):
+def add_fanchart_traces(
+    vector_stats: pd.DataFrame, color: str, legend_group: str
+) -> List[Dict[str, Any]]:
     """Renders a fanchart for an ensemble vector"""
     fill_color = hex_to_rgba(color, 0.3)
     line_color = hex_to_rgba(color, 1)
