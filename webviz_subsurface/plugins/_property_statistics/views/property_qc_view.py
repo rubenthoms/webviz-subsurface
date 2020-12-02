@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import dash_html_components as html
 import dash_core_components as dcc
 import webviz_core_components as wcc
@@ -9,8 +11,11 @@ from .selector_view import (
     source_selector,
 )
 
+if TYPE_CHECKING:
+    from .. import PropertyStatistics
 
-def selector_view(parent) -> html.Div:
+
+def selector_view(parent: "PropertyStatistics") -> html.Div:
     return html.Div(
         className="framed",
         style={"height": "80vh", "overflowY": "auto"},
@@ -32,7 +37,7 @@ def selector_view(parent) -> html.Div:
     )
 
 
-def property_qc_view(parent) -> wcc.FlexBox:
+def property_qc_view(parent: "PropertyStatistics") -> wcc.FlexBox:
     return wcc.FlexBox(
         style={"margin": "20px"},
         children=[
