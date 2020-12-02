@@ -6,7 +6,8 @@ import dash_table
 import webviz_core_components as wcc
 
 if TYPE_CHECKING:
-    from .. import PropertyStatistics
+    # pylint: disable=cyclic-import
+    from ..property_statistics import PropertyStatistics
 
 
 def property_qc_controller(parent: "PropertyStatistics", app: dash.Dash) -> None:

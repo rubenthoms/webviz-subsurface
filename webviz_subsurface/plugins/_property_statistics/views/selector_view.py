@@ -5,7 +5,8 @@ import dash_core_components as dcc
 import webviz_core_components as wcc
 
 if TYPE_CHECKING:
-    from .. import PropertyStatistics
+    # pylint: disable=cyclic-import
+    from ..property_statistics import PropertyStatistics
 
 
 def ensemble_selector(

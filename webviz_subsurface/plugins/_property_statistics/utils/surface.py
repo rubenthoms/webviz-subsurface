@@ -5,7 +5,8 @@ import xtgeo
 from webviz_config.webviz_store import webvizstore
 
 if TYPE_CHECKING:
-    from .. import PropertyStatistics
+    # pylint: disable=cyclic-import
+    from ..property_statistics import PropertyStatistics
 
 
 def surface_from_zone_prop(

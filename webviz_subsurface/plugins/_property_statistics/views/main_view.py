@@ -9,7 +9,8 @@ from .property_delta_view import property_delta_view
 from .property_response_view import property_response_view
 
 if TYPE_CHECKING:
-    from .. import PropertyStatistics
+    # pylint: disable=cyclic-import
+    from ..property_statistics import PropertyStatistics
 
 
 def main_view(parent: "PropertyStatistics") -> dcc.Tabs:

@@ -12,7 +12,8 @@ from .selector_view import (
 )
 
 if TYPE_CHECKING:
-    from .. import PropertyStatistics
+    # pylint: disable=cyclic-import
+    from ..property_statistics import PropertyStatistics
 
 
 def surface_select_view(parent: "PropertyStatistics", tab: str) -> html.Div:

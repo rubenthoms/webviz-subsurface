@@ -12,7 +12,8 @@ from ..models.surface_leaflet_model import (
 )
 
 if TYPE_CHECKING:
-    from .. import PropertyStatistics
+    # pylint: disable=cyclic-import
+    from ..property_statistics import PropertyStatistics
 
 
 def property_delta_controller(parent: "PropertyStatistics", app: dash.Dash) -> None:
