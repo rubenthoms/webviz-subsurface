@@ -25,7 +25,7 @@ def testdata_folder(request: SubRequest) -> Any:
 
 
 @pytest.fixture()
-def app():
+def app() -> dash.Dash:
     dash_app = dash.Dash(__name__)
     dash_app.css.config.serve_locally = True
     dash_app.scripts.config.serve_locally = True
