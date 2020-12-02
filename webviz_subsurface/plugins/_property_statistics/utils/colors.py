@@ -1,4 +1,4 @@
-from typing import Union, Tuple, Literal
+from typing import Tuple
 
 
 def find_intermediate_color_rgba(
