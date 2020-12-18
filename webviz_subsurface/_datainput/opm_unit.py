@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import IntEnum
 
 
-class ErtEclUnitEnum(Enum):
+class ErtEclUnitEnum(IntEnum):
     ECL_METRIC_UNITS = 1
     ECL_FIELD_UNITS = 2
     ECL_LAB_UNITS = 3
@@ -45,9 +45,9 @@ class Unit:
     year = 365.0 * day
 
     # Volume
-    gallon = 231.0 * cubic(inch)
+    gallon = 231.0 * cubic.__func__(inch)
     stb = 42.0 * gallon
-    liter = 1.0 * cubic(Prefix.deci * meter)
+    liter = 1.0 * cubic.__func__(Prefix.deci * meter)
 
     # Mass
     kilogram = 1.0
@@ -59,22 +59,22 @@ class Unit:
     btu = 1054.3503 * joule
 
     # Standardised constant
-    gravity = 9.80665 * meter / square(second)
+    gravity = 9.80665 * meter / square.__func__(second)
 
     ###############################
     # Derived units and conversions
     ###############################
 
     # Force
-    Newton = kilogram * meter / square(second)
+    Newton = kilogram * meter / square.__func__(second)
     dyne = 1.0e-5 * Newton
     lbf = pound * gravity
 
     # Pressure
-    Pascal = Newton / square(meter)
+    Pascal = Newton / square.__func__(meter)
     barsa = 100000.0 * Pascal
     atm = 101325.0 * Pascal
-    psia = lbf / square(inch)
+    psia = lbf / square.__func__(inch)
 
     # Temperature
     deg_celsius = 1.0
@@ -87,15 +87,13 @@ class Unit:
     Pas = Pascal * second
     Poise = Prefix.deci * Pas
 
-    class PermDetails:
-        p_grad = Unit.atm / (Prefix.centi * Unit.meter)
-        area = Unit.square(Prefix.centi * Unit.meter)
-        flux = Unit.cubic(Prefix.centi * Unit.meter) / Unit.second
-        velocity = flux / area
-        visc = Prefix.centi * Unit.Poise
-        darcy = (velocity * visc) / p_grad
-
-    darcy = PermDetails.darcy
+    # Permeability
+    p_grad = atm / (Prefix.centi * meter)
+    area = square.__func__(Prefix.centi * meter)
+    flux = cubic.__func__(Prefix.centi * meter) / second
+    velocity = flux / area
+    visc = Prefix.centi * Poise
+    darcy = (velocity * visc) / p_grad
 
     class Convert:
         @staticmethod

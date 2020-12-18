@@ -272,7 +272,7 @@ class EclUnits:
         elif unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
             return EclUnits.EclPvtMUnitSystem()
         else:
-            raise ValueError("Unsupported Unit Convention.")
+            raise ValueError(f"Unsupported Unit Convention: {unit_system}")
 
 
 class ConvertUnits:
@@ -613,30 +613,52 @@ def extrap1d(interpolator: interpolate.interp1d) -> Callable[[float], np.ndarray
 class PVDx:
     def __init__(
         self,
-        begin: int,
+        index_table: int,
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
-        columns: List[int],
     ) -> None:
         self.x: np.ndarray = np.zeros(raw.num_rows)
         self.y: np.ndarray = np.zeros((raw.num_rows, raw.num_cols))
 
         column_stride = raw.num_rows * raw.num_tables * raw.num_primary
+        table_stride = raw.num_primary * raw.num_rows
 
-        for row in range(begin, begin + raw.num_rows):
-            if abs(raw.data[row]) < 1.0e20:
-                self.x[row - begin] = convert.independent(raw.data[row])
-
-                for col in range(0, len(columns)):
-                    self.y[row, col] = convert.column[row](
-                        raw.data[begin + column_stride * col + row]
+        for index_primary in range(0, raw.num_primary):
+            if self.entry_valid(raw.primary_key[index_primary]):
+                for index_row in range(0, raw.num_rows):
+                    current_index = index_primary * raw.num_rows + index_row
+                    current_stride = (
+                        index_table * table_stride
+                        + index_primary * raw.num_rows
+                        + index_row
                     )
+
+                    if self.entry_valid(raw.data[column_stride * 0 + current_stride]):
+                        self.x[current_index] = convert.independent(
+                            raw.data[column_stride * 0 + current_stride]
+                        )
+
+                        for index_column in range(1, raw.num_cols):
+                            self.y[index_column][current_index] = convert.column[
+                                index_column - 1
+                            ](raw.data[column_stride * index_column + current_stride])
+
+                    else:
+                        break
+            else:
+                break
 
         if len(self.x) < 2:
             raise ValueError("No Interpolation Interval of Non-Zero Size.")
 
         self.interpolation = interpolate.interp1d(self.x, self.y, axis=1)
         self.inter_extrapolation = extrap1d(self.interpolation)
+
+    @staticmethod
+    def entry_valid(x: float) -> bool:
+        # Equivalent to ECLPiecewiseLinearInterpolant.hpp line 293
+        # or ECLPvtOil.cpp line 458
+        return abs(x) < 1.0e20
 
     def formation_volume_factor(self, pressure: List[float]) -> List[float]:
         # 1 / (1 / B)
@@ -668,28 +690,91 @@ class PVDx:
 
 class PVTx:
     def __init__(
-        self, keys: List[float], property_interpolants: List[interpolate.interp1d]
+        self,
+        index_table: int,
+        raw: EclPropertyTableRawData,
+        convert: Tuple[
+            Callable[
+                [
+                    float,
+                ],
+                float,
+            ],
+            ConvertUnits,
+        ],
     ) -> None:
-        self.keys = keys
-        self.property_interpolants = property_interpolants
+        size = raw.num_primary * raw.num_rows
+        self.keys: np.ndarray = np.zeros(size)
+        self.x: np.ndarray = np.zeros(size)
+        self.y: List[np.ndarray] = [
+            np.zeros(size) for i in range(0, raw.num_cols)
+        ]
 
-        if len(self.keys) != len(self.property_interpolants):
-            raise ValueError(
-                "Size of Key Table Does not Match Number of Sub-Table Interpolants."
+        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
+        table_stride = raw.num_primary * raw.num_rows
+
+        for index_primary in range(0, raw.num_primary):
+            if self.entry_valid(raw.primary_key[index_primary]):
+                for index_row in range(0, raw.num_rows):
+                    current_index = index_primary * raw.num_rows + index_row
+                    current_stride = (
+                        index_table * table_stride
+                        + index_primary * raw.num_rows
+                        + index_row
+                    )
+
+                    if self.entry_valid(raw.data[column_stride * 0 + current_stride]):
+                        self.keys[current_index] = convert[0](
+                            raw.primary_key[index_primary]
+                        )
+                        self.x[current_index] = convert[1].independent(
+                            raw.data[column_stride * 0 + current_stride]
+                        )
+
+                        for index_column in range(1, raw.num_cols):
+                            self.y[index_column - 1][current_index] = convert[1].column[
+                                index_column - 1
+                            ](raw.data[column_stride * index_column + current_stride])
+
+                    else:
+                        break
+            else:
+                break
+
+        self.interpolants: List[interpolate.interp2d] = []
+
+        for index_column in range(0, raw.num_cols - 1):
+            self.interpolants.append(
+                extrap1d(interpolate.interp2d(self.keys, self.x, self.y[index_column]))
             )
-
-        if len(self.keys) < 2:
-            raise ValueError(
-                "Mixing-Dependent Property Evaluator Must Have At Least Two Inner Tables"
-            )
-
-    def formation_volume_factor(key: List[float], x: List[float]) -> List[float]:
-        return self.compute_quantity(
-            key, x, lambda curve, point: self.property_interpolants[curve](point)[0]
-        )
 
     @staticmethod
+    def entry_valid(x: float) -> bool:
+        # Equivalent to ECLPiecewiseLinearInterpolant.hpp line 293
+        # or ECLPvtOil.cpp line 458
+        return abs(x) < 1.0e20
+
+    def formation_volume_factor(self, key: List[float], x: List[float]) -> List[float]:
+        return self.compute_quantity(
+            key,
+            x,
+            lambda curve, point: self.interpolants[0](curve, point),
+            lambda recip_fvf: 1.0 / recip_fvf,
+        )
+
+    def viscosity(self, key: List[float], x: List[float]) -> List[float]:
+        return self.compute_quantity(
+            key,
+            x,
+            lambda curve, point: [
+                self.interpolants[0](curve, point),
+                self.interpolants[1](curve, point),
+            ],
+            lambda dense_vector: dense_vector[0] / dense_vector[1],
+        )
+
     def compute_quantity(
+        self,
         key: List[float],
         x: List[float],
         inner_function: Callable,
@@ -707,27 +792,49 @@ class PVTx:
         for i in range(0, num_vals):
             quantity = self.evaluate(key[i], x[i], inner_function)
 
-            result.append(quantity)
+            results.append(outer_function(quantity))
 
-        return result
+        return results
 
-    def evaluate(self, key: float, x: float, func: Callable) -> np.ndarray:
-        
+    @staticmethod
+    def evaluate(key: float, x: float, func: Callable) -> np.ndarray:
+        return func(key, x)
 
 
 class LiveOil(PvxOBase):
-    pass
+    def __init__(
+        self,
+        index_table: int,
+        raw: EclPropertyTableRawData,
+        convert: Tuple[
+            Callable[
+                [
+                    float,
+                ],
+                float,
+            ],
+            ConvertUnits,
+        ],
+    ) -> None:
+        self.interpolant = PVTx(index_table, raw, convert)
+
+    def formation_volume_factor(
+        self, ratio: List[float], pressure: List[float]
+    ) -> List[float]:
+        return self.interpolant.formation_volume_factor(ratio, pressure)
+
+    def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        return self.interpolant.viscosity(ratio, pressure)
 
 
 class DeadOil(PvxOBase):
     def __init__(
         self,
-        indep: int,
+        table_index: int,
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
-        columns: List[int],
     ) -> None:
-        self.interpolant = PVDx(indep, raw, convert, columns)
+        self.interpolant = PVDx(table_index, raw, convert)
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
@@ -741,19 +848,25 @@ class DeadOil(PvxOBase):
 class DeadOilConstCompr(PvxOBase):
     def __init__(
         self,
-        indep: int,
+        index_table: int,
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
-        columns: List[int],
     ) -> None:
         self.rhos = 0.0
 
-        self.fvf = convert.column[0](raw.data[columns[0]])  # Bo
-        self.c_o = convert.column[1](raw.data[columns[1]])  # Co
-        self.visc = convert.column[2](raw.data[columns[2]])  # mu_o
-        self.c_v = convert.column[3](raw.data[columns[3]])  # Cv
+        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
+        table_stride = raw.num_primary * raw.num_rows
 
-        self.p_o_ref = convert.independent(raw.data[indep])
+        current_stride = index_table * table_stride
+
+        self.fvf = convert.column[0](raw.data[0 * column_stride + current_stride])  # Bo
+        self.c_o = convert.column[1](raw.data[1 * column_stride + current_stride])  # Co
+        self.visc = convert.column[2](
+            raw.data[2 * column_stride + current_stride]
+        )  # mu_o
+        self.c_v = convert.column[3](raw.data[3 * column_stride + current_stride])  # Cv
+
+        self.p_o_ref = convert.independent(raw.data[current_stride])
 
         if abs(self.p_o_ref) < 1.0e20:
             raise ValueError("Invalid Input PVCDO Table")
@@ -798,11 +911,47 @@ class DeadOilConstCompr(PvxOBase):
 
 
 class WetGas(PvxOBase):
-    pass
+    def __init__(
+        self,
+        index_table: int,
+        raw: EclPropertyTableRawData,
+        convert: Tuple[
+            Callable[
+                [
+                    float,
+                ],
+                float,
+            ],
+            ConvertUnits,
+        ],
+    ) -> None:
+        self.interpolant = PVTx(index_table, raw, convert)
+
+    def formation_volume_factor(
+        self, ratio: List[float], pressure: List[float]
+    ) -> List[float]:
+        return self.interpolant.formation_volume_factor(ratio, pressure)
+
+    def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        return self.interpolant.viscosity(ratio, pressure)
 
 
 class DryGas(PvxOBase):
-    pass
+    def __init__(
+        self,
+        table_index: int,
+        raw: EclPropertyTableRawData,
+        convert: ConvertUnits,
+    ) -> None:
+        self.interpolant = PVDx(table_index, raw, convert)
+
+    def formation_volume_factor(
+        self, ratio: List[float], pressure: List[float]
+    ) -> List[float]:
+        return self.interpolant.formation_volume_factor(pressure)
+
+    def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        return self.interpolant.viscosity(pressure)
 
 
 class WaterImpl(PvxOBase):
@@ -813,23 +962,12 @@ class MakeInterpolants:
     @staticmethod
     def from_raw_data(
         raw: EclPropertyTableRawData,
-        construct: Callable[[int, EclPropertyTableRawData, List[int]], PvxOBase],
+        construct: Callable[[int, EclPropertyTableRawData], PvxOBase],
     ) -> List[PvxOBase]:
         interpolants: List[PvxOBase] = []
 
-        num_interpolants = raw.num_tables * raw.num_primary
-        col_stride = raw.num_rows * num_interpolants
-
-        begin: int = 0
-        columns: List[int] = [begin + col_stride]
-
-        for _ in range(1, raw.num_cols):
-            columns.append(columns[-1] + col_stride)
-
-        for _ in range(0, num_interpolants):
-            interpolants.append(construct(begin, raw, columns))
-            begin += raw.num_rows
-            columns = [x + raw.num_rows for x in columns]
+        for table_index in range(0, raw.num_tables):
+            interpolants.append(construct(table_index, raw))
 
         return interpolants
 
@@ -895,7 +1033,7 @@ class Oil(Implementation):
     def dead_oil_unit_converter(
         unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
-        if isinstance(unit_system, int):
+        if type(unit_system) == int:
             unit_system = EclUnits.create_unit_system(unit_system)
 
         return ConvertUnits(
@@ -912,7 +1050,7 @@ class Oil(Implementation):
     def pvcdo_unit_converter(
         unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
-        if isinstance(unit_system, int):
+        if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
         return ConvertUnits(
@@ -929,7 +1067,7 @@ class Oil(Implementation):
     def live_oil_unit_converter(
         unit_system: Union[int, EclUnits.UnitSystem]
     ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
-        if isinstance(unit_system, int):
+        if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
         return (
@@ -964,76 +1102,31 @@ class Oil(Implementation):
     def create_live_oil(
         self, raw: EclPropertyTableRawData, unit_system: int
     ) -> List[PvxOBase]:
-        # Holding raw.num_tables values
-        ret: List[PvxOBase] = []
+        cvrt = self.live_oil_unit_converter(unit_system)
 
-        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
-        table_stride = raw.num_primary * raw.num_rows
-
-        # pylint: disable=too-many-nested-blocks
-        for index_table in range(0, raw.num_tables):
-            values = []
-
+        return MakeInterpolants.from_raw_data(
             # PKey   Inner   C0     C1         C2           C3
             # Rs     Po      1/B    1/(B*mu)   d(1/B)/dPo   d(1/(B*mu))/dPo
             #        :       :      :          :            :
-
-            for index_primary in range(0, raw.num_primary):
-                if self.entry_valid(raw.primary_key[index_primary]):
-                    outer_value_pair = VariateAndValues()
-                    outer_value_pair.x = raw.primary_key[index_primary]
-                    # TODO(Ruben): Is there a better way to achieve this?
-                    temp_list: List[VariateAndValues] = []
-                    outer_value_pair.y = temp_list
-                    for index_row in range(0, raw.num_rows):
-                        pressure = raw.data[
-                            column_stride * 0
-                            + index_table * table_stride
-                            + index_primary * raw.num_rows
-                            + index_row
-                        ]
-                        if self.entry_valid(pressure):
-                            inner_value_pair = VariateAndValues()
-                            inner_value_pair.x = pressure
-                            inner_value_pair.y = [0.0 for col in range(1, raw.num_cols)]
-                            for index_column in range(1, raw.num_cols):
-                                inner_value_pair.y[index_column - 1] = raw.data[
-                                    column_stride * index_column
-                                    + index_table * table_stride
-                                    + index_primary * raw.num_rows
-                                    + index_row
-                                ]
-                            outer_value_pair.y.append(inner_value_pair)
-                        else:
-                            break
-                else:
-                    break
-
-                values.append(outer_value_pair)
-            ret.append(LiveOil(values))
-
-        return ret
+            raw,
+            lambda table_index, raw: LiveOil(table_index, raw, cvrt),
+        )
 
     def create_dead_oil(
         self, raw: EclPropertyTableRawData, const_compr: bool, unit_system: int
     ) -> List[PvxOBase]:
-        # Holding raw.num_tables values
-        ret: List[PvxOBase] = []
-
         if const_compr:
             cvrt = self.pvcdo_unit_converter(unit_system)
 
             return MakeInterpolants.from_raw_data(
                 raw,
-                lambda indep, raw, columns: DeadOilConstCompr(
-                    indep, raw, cvrt, columns
-                ),
+                lambda table_index, raw: DeadOilConstCompr(table_index, raw, cvrt),
             )
 
         cvrt = self.dead_oil_unit_converter(unit_system)
 
         return MakeInterpolants.from_raw_data(
-            raw, lambda indep, raw, columns: DeadOil(indep, raw, cvrt, columns)
+            raw, lambda table_index, raw: DeadOil(table_index, raw, cvrt)
         )
 
     @staticmethod
@@ -1079,8 +1172,8 @@ class Oil(Implementation):
 
         return Oil(
             raw,
-            is_is_const_compr,
             intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
+            is_is_const_compr,
             rhos,
         )
 
@@ -1116,113 +1209,70 @@ class Gas(Implementation):
 
         return self.create_wet_gas(raw, unit_system)
 
+    @staticmethod
+    def dry_gas_unit_converter(
+        unit_system: Union[int, EclUnits.UnitSystem]
+    ) -> ConvertUnits:
+        if not isinstance(unit_system, EclUnits.UnitSystem):
+            unit_system = EclUnits.create_unit_system(unit_system)
+
+        return ConvertUnits(
+            CreateUnitConverter.ToSI.pressure(unit_system),
+            [
+                CreateUnitConverter.ToSI.recip_fvf_gas(unit_system),
+                CreateUnitConverter.ToSI.recip_fvf_gas_visc(unit_system),
+                CreateUnitConverter.ToSI.recip_fvf_gas_deriv_press(unit_system),
+                CreateUnitConverter.ToSI.recip_fvf_gas_visc_deriv_press(unit_system),
+            ],
+        )
+
+    @staticmethod
+    def wet_gas_unit_converter(
+        unit_system: Union[int, EclUnits.UnitSystem]
+    ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
+        if not isinstance(unit_system, EclUnits.UnitSystem):
+            unit_system = EclUnits.create_unit_system(unit_system)
+
+        return (
+            CreateUnitConverter.ToSI.pressure(unit_system),
+            ConvertUnits(
+                CreateUnitConverter.ToSI.vaporised_oil_gas_ratio(unit_system),
+                [
+                    CreateUnitConverter.ToSI.recip_fvf_gas(unit_system),
+                    CreateUnitConverter.ToSI.recip_fvf_gas_visc(unit_system),
+                    CreateUnitConverter.ToSI.recip_fvf_gas_deriv_vap_oil(unit_system),
+                    CreateUnitConverter.ToSI.recip_fvf_gas_visc_deriv_vap_oil(
+                        unit_system
+                    ),
+                ],
+            ),
+        )
+
     def create_dry_gas(
         self, raw: EclPropertyTableRawData, unit_system: int
     ) -> List[PvxOBase]:
-        # Holding raw.num_tables values
-        ret: List[PvxOBase] = []
+        cvrt = self.dry_gas_unit_converter(unit_system)
 
-        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
-        table_stride = raw.num_primary * raw.num_rows
-
-        # pylint: disable=too-many-nested-blocks
-        for index_table in range(0, raw.num_tables):
-            values = []
-
-            # Key     C0     C1         C2           C3
-            # Pg      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
-            # :       :      :          NaN          NaN
-
-            for index_primary in range(0, raw.num_primary):
-                if self.entry_valid(raw.primary_key[index_primary]):
-                    outer_value_pair = VariateAndValues()
-                    outer_value_pair.x = raw.primary_key[index_primary]
-                    # TODO(Ruben): Is there a better way to achieve this?
-                    temp_list: List[VariateAndValues] = []
-                    outer_value_pair.y = temp_list
-                    for index_row in range(0, raw.num_rows):
-                        pressure = raw.data[
-                            column_stride * 0
-                            + index_table * table_stride
-                            + index_primary * raw.num_rows
-                            + index_row
-                        ]
-                        if self.entry_valid(pressure):
-                            inner_value_pair = VariateAndValues()
-                            inner_value_pair.x = pressure
-                            inner_value_pair.y = [0.0 for col in range(1, raw.num_cols)]
-                            for index_column in range(1, raw.num_cols):
-                                inner_value_pair.y[index_column - 1] = raw.data[
-                                    column_stride * index_column
-                                    + index_table * table_stride
-                                    + index_primary * raw.num_rows
-                                    + index_row
-                                ]
-                            outer_value_pair.y.append(inner_value_pair)
-                        else:
-                            break
-                else:
-                    break
-
-                values.append(outer_value_pair)
-
-            ret.append(DryGas(values))
-
-        return ret
+        return MakeInterpolants.from_raw_data(
+            # PKey   Inner   C0     C1         C2           C3
+            # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
+            #        :       :      :          :            :
+            raw,
+            lambda table_index, raw: DryGas(table_index, raw, cvrt),
+        )
 
     def create_wet_gas(
         self, raw: EclPropertyTableRawData, unit_system: int
     ) -> List[PvxOBase]:
-        # Holding raw.num_tables values
-        ret: List[PvxOBase] = []
+        cvrt = self.wet_gas_unit_converter(unit_system)
 
-        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
-        table_stride = raw.num_primary * raw.num_rows
-
-        # pylint: disable=too-many-nested-blocks
-        for index_table in range(0, raw.num_tables):
-            values = []
-
+        return MakeInterpolants.from_raw_data(
             # PKey   Inner   C0     C1         C2           C3
             # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
             #        :       :      :          :            :
-
-            for index_primary in range(0, raw.num_primary):
-                if self.entry_valid(raw.primary_key[index_primary]):
-                    outer_value_pair = VariateAndValues()
-                    outer_value_pair.x = raw.primary_key[index_primary]
-                    # TODO(Ruben): Is there a better way to achieve this?
-                    temp_list: List[VariateAndValues] = []
-                    outer_value_pair.y = temp_list
-                    for index_row in range(0, raw.num_rows):
-                        r_v = raw.data[
-                            column_stride * 0
-                            + index_table * table_stride
-                            + index_primary * raw.num_rows
-                            + index_row
-                        ]
-                        if self.entry_valid(r_v):
-                            inner_value_pair = VariateAndValues()
-                            inner_value_pair.x = r_v
-                            inner_value_pair.y = [0.0 for col in range(1, raw.num_cols)]
-                            for index_column in range(1, raw.num_cols):
-                                inner_value_pair.y[index_column - 1] = raw.data[
-                                    column_stride * index_column
-                                    + index_table * table_stride
-                                    + index_primary * raw.num_rows
-                                    + index_row
-                                ]
-                            outer_value_pair.y.append(inner_value_pair)
-                        else:
-                            break
-                else:
-                    break
-
-                values.append(outer_value_pair)
-
-            ret.append(WetGas(values))
-
-        return ret
+            raw,
+            lambda table_index, raw: WetGas(table_index, raw, cvrt),
+        )
 
     @staticmethod
     def from_ecl_init_file(ecl_init_file: EclFile) -> Optional["Gas"]:
