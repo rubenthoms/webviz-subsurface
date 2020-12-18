@@ -5,9 +5,13 @@
 ########################################
 
 from enum import Enum
-from typing import List, Optional, Union, cast
+from typing import List, Optional, Union, cast, Callable, Tuple, Any
+
+from scipy import interpolate
+import numpy as np
 
 from opm.io.ecl import EclFile
+from .opm_unit import UnitSystems, ErtEclUnitEnum, Unit
 
 
 class InitFileDefinitions:  # pylint: disable=too-few-public-methods
@@ -45,6 +49,465 @@ class EclPhaseIndex(Enum):
     Vapour = 2
 
 
+class EclUnits:
+    class UnitSystem:
+        @staticmethod
+        def density() -> float:
+            return 0.0
+
+        @staticmethod
+        def depth() -> float:
+            return 0.0
+
+        @staticmethod
+        def pressure() -> float:
+            return 0.0
+
+        @staticmethod
+        def reservoir_rate() -> float:
+            return 0.0
+
+        @staticmethod
+        def reservoir_volume() -> float:
+            return 0.0
+
+        @staticmethod
+        def surface_volume_gas() -> float:
+            return 0.0
+
+        @staticmethod
+        def surface_volume_liquid() -> float:
+            return 0.0
+
+        @staticmethod
+        def time() -> float:
+            return 0.0
+
+        @staticmethod
+        def transmissibility() -> float:
+            return 0.0
+
+        @staticmethod
+        def viscosity() -> float:
+            return 0.0
+
+        def dissolved_gas_oil_ratio(self) -> float:
+            return self.surface_volume_gas() / self.surface_volume_liquid()
+
+        def vaporised_oil_gas_ratio(self) -> float:
+            return self.surface_volume_liquid() / self.surface_volume_gas()
+
+    class EclMetricUnitSystem(UnitSystem):
+        @staticmethod
+        def density() -> float:
+            return UnitSystems.Metric.Density
+
+        @staticmethod
+        def depth() -> float:
+            return UnitSystems.Metric.Length
+
+        @staticmethod
+        def pressure() -> float:
+            return UnitSystems.Metric.Pressure
+
+        @staticmethod
+        def reservoir_rate() -> float:
+            return UnitSystems.Metric.ReservoirVolume / UnitSystems.Metric.Time
+
+        @staticmethod
+        def reservoir_volume() -> float:
+            return UnitSystems.Metric.ReservoirVolume
+
+        @staticmethod
+        def surface_volume_gas() -> float:
+            return UnitSystems.Metric.GasSurfaceVolume
+
+        @staticmethod
+        def surface_volume_liquid() -> float:
+            return UnitSystems.Metric.LiquidSurfaceVolume
+
+        @staticmethod
+        def time() -> float:
+            return UnitSystems.Metric.Time
+
+        @staticmethod
+        def transmissibility() -> float:
+            return UnitSystems.Metric.Transmissibility
+
+        @staticmethod
+        def viscosity() -> float:
+            return UnitSystems.Metric.Viscosity
+
+    class EclFieldUnitSystem(UnitSystem):
+        @staticmethod
+        def density() -> float:
+            return UnitSystems.Field.Density
+
+        @staticmethod
+        def depth() -> float:
+            return UnitSystems.Field.Length
+
+        @staticmethod
+        def pressure() -> float:
+            return UnitSystems.Field.Pressure
+
+        @staticmethod
+        def reservoir_rate() -> float:
+            return UnitSystems.Field.ReservoirVolume / UnitSystems.Field.Time
+
+        @staticmethod
+        def reservoir_volume() -> float:
+            return UnitSystems.Field.ReservoirVolume
+
+        @staticmethod
+        def surface_volume_gas() -> float:
+            return UnitSystems.Field.GasSurfaceVolume
+
+        @staticmethod
+        def surface_volume_liquid() -> float:
+            return UnitSystems.Field.LiquidSurfaceVolume
+
+        @staticmethod
+        def time() -> float:
+            return UnitSystems.Field.Time
+
+        @staticmethod
+        def transmissibility() -> float:
+            return UnitSystems.Field.Transmissibility
+
+        @staticmethod
+        def viscosity() -> float:
+            return UnitSystems.Field.Viscosity
+
+    class EclLabUnitSystem(UnitSystem):
+        @staticmethod
+        def density() -> float:
+            return UnitSystems.Lab.Density
+
+        @staticmethod
+        def depth() -> float:
+            return UnitSystems.Lab.Length
+
+        @staticmethod
+        def pressure() -> float:
+            return UnitSystems.Lab.Pressure
+
+        @staticmethod
+        def reservoir_rate() -> float:
+            return UnitSystems.Lab.ReservoirVolume / UnitSystems.Lab.Time
+
+        @staticmethod
+        def reservoir_volume() -> float:
+            return UnitSystems.Lab.ReservoirVolume
+
+        @staticmethod
+        def surface_volume_gas() -> float:
+            return UnitSystems.Lab.GasSurfaceVolume
+
+        @staticmethod
+        def surface_volume_liquid() -> float:
+            return UnitSystems.Lab.LiquidSurfaceVolume
+
+        @staticmethod
+        def time() -> float:
+            return UnitSystems.Lab.Time
+
+        @staticmethod
+        def transmissibility() -> float:
+            return UnitSystems.Lab.Transmissibility
+
+        @staticmethod
+        def viscosity() -> float:
+            return UnitSystems.Lab.Viscosity
+
+    class EclPvtMUnitSystem(UnitSystem):
+        @staticmethod
+        def density() -> float:
+            return UnitSystems.PVTM.Density
+
+        @staticmethod
+        def depth() -> float:
+            return UnitSystems.PVTM.Length
+
+        @staticmethod
+        def pressure() -> float:
+            return UnitSystems.PVTM.Pressure
+
+        @staticmethod
+        def reservoir_rate() -> float:
+            return UnitSystems.PVTM.ReservoirVolume / UnitSystems.PVTM.Time
+
+        @staticmethod
+        def reservoir_volume() -> float:
+            return UnitSystems.PVTM.ReservoirVolume
+
+        @staticmethod
+        def surface_volume_gas() -> float:
+            return UnitSystems.PVTM.GasSurfaceVolume
+
+        @staticmethod
+        def surface_volume_liquid() -> float:
+            return UnitSystems.PVTM.LiquidSurfaceVolume
+
+        @staticmethod
+        def time() -> float:
+            return UnitSystems.PVTM.Time
+
+        @staticmethod
+        def transmissibility() -> float:
+            return UnitSystems.PVTM.Transmissibility
+
+        @staticmethod
+        def viscosity() -> float:
+            return UnitSystems.PVTM.Viscosity
+
+    @staticmethod
+    def create_unit_system(unit_system: int) -> UnitSystem:
+        if unit_system == ErtEclUnitEnum.ECL_METRIC_UNITS:
+            return EclUnits.EclMetricUnitSystem()
+        elif unit_system == ErtEclUnitEnum.ECL_FIELD_UNITS:
+            return EclUnits.EclFieldUnitSystem()
+        elif unit_system == ErtEclUnitEnum.ECL_LAB_UNITS:
+            return EclUnits.EclLabUnitSystem()
+        elif unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
+            return EclUnits.EclPvtMUnitSystem()
+        else:
+            raise ValueError("Unsupported Unit Convention.")
+
+
+class ConvertUnits:
+    def __init__(
+        self,
+        indepent: Callable[
+            [
+                float,
+            ],
+            float,
+        ],
+        column: List[
+            Callable[
+                [
+                    float,
+                ],
+                float,
+            ]
+        ],
+    ) -> None:
+        self.independent: Callable[
+            [
+                float,
+            ],
+            float,
+        ] = indepent
+        self.column: List[
+            Callable[
+                [
+                    float,
+                ],
+                float,
+            ]
+        ] = column
+
+
+class CreateUnitConverter:
+    @staticmethod
+    def create_converter_to_SI(
+        uscale: float,
+    ) -> Callable[[float,], float]:
+        return lambda quantity: Unit.Convert.from_(quantity, uscale)
+
+    @staticmethod
+    def rs_scale(unit_system: EclUnits.UnitSystem) -> float:
+        # Rs = [sVolume(Gas) / sVolume(Liquid)]
+        return unit_system.surface_volume_gas() / unit_system.surface_volume_liquid()
+
+    @staticmethod
+    def rv_scale(unit_system: EclUnits.UnitSystem) -> float:
+        # Rv = [sVolume(Liq) / sVolume(Gas)]
+        return unit_system.surface_volume_liquid() / unit_system.surface_volume_gas()
+
+    @staticmethod
+    def fvf_scale(unit_system: EclUnits.UnitSystem) -> float:
+        # B = [rVolume / sVolume(Liquid)]
+        return unit_system.reservoir_volume() / unit_system.surface_volume_liquid()
+
+    @staticmethod
+    def fvf_gas_scale(unit_system: EclUnits.UnitSystem) -> float:
+        # B = [rVolume / sVolume(Gas)]
+        return unit_system.reservoir_volume() / unit_system.surface_volume_gas()
+
+    class ToSI:
+        @staticmethod
+        def density(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(unit_system.density())
+
+        @staticmethod
+        def pressure(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(unit_system.pressure())
+
+        @staticmethod
+        def compressibility(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / unit_system.pressure()
+            )
+
+        @staticmethod
+        def dissolved_gas_oil_ratio(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                CreateUnitConverter.rs_scale(unit_system)
+            )
+
+        @staticmethod
+        def vaporised_oil_gas_ratio(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                CreateUnitConverter.rv_scale(unit_system)
+            )
+
+        @staticmethod
+        def recip_fvf(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / CreateUnitConverter.fvf_scale(unit_system)
+            )
+
+        @staticmethod
+        def recip_fvf_deriv_press(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/B)/dp
+            b_scale = CreateUnitConverter.fvf_scale(unit_system)
+            p_scale = unit_system.pressure()
+
+            return CreateUnitConverter.create_converter_to_SI(1.0 / (b_scale * p_scale))
+
+        @staticmethod
+        def recip_fvf_deriv_vap_oil(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/B)/dRv
+            b_scale = CreateUnitConverter.fvf_scale(unit_system)
+            rv_scale = CreateUnitConverter.rv_scale(unit_system)
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * rv_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_visc(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            b_scale = CreateUnitConverter.fvf_scale(unit_system)
+            visc_scale = unit_system.viscosity()
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * visc_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_visc_deriv_press(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/(B*mu))/dp
+            b_scale = CreateUnitConverter.fvf_scale(unit_system)
+            p_scale = unit_system.pressure()
+            visc_scale = unit_system.viscosity()
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * visc_scale * p_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_visc_deriv_vap_oil(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/(B*mu))/dRv
+            b_scale = CreateUnitConverter.fvf_scale(unit_system)
+            visc_scale = unit_system.viscosity()
+            rv_scale = CreateUnitConverter.rv_scale(unit_system)
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * visc_scale * rv_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_gas(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / CreateUnitConverter.fvf_gas_scale(unit_system)
+            )
+
+        @staticmethod
+        def recip_fvf_gas_deriv_press(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/B)/dp
+            b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
+            p_scale = unit_system.pressure()
+
+            return CreateUnitConverter.create_converter_to_SI(1.0 / (b_scale * p_scale))
+
+        @staticmethod
+        def recip_fvf_gas_deriv_vap_oil(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/B)/dRv
+            b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
+            rv_scale = CreateUnitConverter.rv_scale(unit_system)
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * rv_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_gas_visc(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
+            visc_scale = unit_system.viscosity()
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * visc_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_gas_visc_deriv_press(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/(B*mu))/dp
+            b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
+            p_scale = unit_system.pressure()
+            visc_scale = unit_system.viscosity()
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * visc_scale * p_scale)
+            )
+
+        @staticmethod
+        def recip_fvf_gas_visc_deriv_vap_oil(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            # d(1/(B*mu))/dRv
+            b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
+            visc_scale = unit_system.viscosity()
+            rv_scale = CreateUnitConverter.rv_scale(unit_system)
+
+            return CreateUnitConverter.create_converter_to_SI(
+                1.0 / (b_scale * visc_scale * rv_scale)
+            )
+
+
 class EclPropertyTableRawData:  # pylint: disable=too-few-public-methods
     """
     A structure for storing read
@@ -60,7 +523,7 @@ class EclPropertyTableRawData:  # pylint: disable=too-few-public-methods
         self.num_tables = 0
 
 
-def const_compr_index() -> int:
+def is_const_compr_index() -> int:
     return InitFileDefinitions.LOGIHEAD_CONSTANT_OILCOMPR_INDEX
 
 
@@ -116,17 +579,140 @@ class PvxOBase:
 
     # pylint: disable=R0201
     def formation_volume_factor(
-        self, set_value: List[float], pressure: List[float]
+        self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
         """
         Does only return an empty list for now.
         """
-        if len(set_value) != len(pressure):
-            raise ValueError("rs and po arguments must be of same size")
+        if len(ratio) != len(pressure):
+            raise ValueError("Rs / Rv and pressure arguments must be of same size.")
         return []
 
-    def viscosity(self, set_value: List[float], pressure: List[float]) -> List[float]:
+    def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
         pass
+
+
+def extrap1d(interpolator: interpolate.interp1d) -> Callable[[float], np.ndarray]:
+    x_s = interpolator.x
+    y_s = interpolator.y
+
+    def pointwise(x: float) -> np.ndarray:
+        if x < x_s[0]:
+            return y_s[0] + (x - x_s[0]) * (y_s[1] - y_s[0]) / (x_s[1] - x_s[0])
+        elif x > x_s[-1]:
+            return y_s[-1] + (x - x_s[-1]) * (y_s[-1] - y_s[-2]) / (x_s[-1] - x_s[-2])
+        else:
+            return interpolator(x)
+
+    def ufunclike(x_s: float) -> np.ndarray:
+        return np.ndarray(list(map(pointwise, np.ndarray(x_s))))
+
+    return ufunclike
+
+
+class PVDx:
+    def __init__(
+        self,
+        begin: int,
+        raw: EclPropertyTableRawData,
+        convert: ConvertUnits,
+        columns: List[int],
+    ) -> None:
+        self.x: np.ndarray = np.zeros(raw.num_rows)
+        self.y: np.ndarray = np.zeros((raw.num_rows, raw.num_cols))
+
+        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
+
+        for row in range(begin, begin + raw.num_rows):
+            if abs(raw.data[row]) < 1.0e20:
+                self.x[row - begin] = convert.independent(raw.data[row])
+
+                for col in range(0, len(columns)):
+                    self.y[row, col] = convert.column[row](
+                        raw.data[begin + column_stride * col + row]
+                    )
+
+        if len(self.x) < 2:
+            raise ValueError("No Interpolation Interval of Non-Zero Size.")
+
+        self.interpolation = interpolate.interp1d(self.x, self.y, axis=1)
+        self.inter_extrapolation = extrap1d(self.interpolation)
+
+    def formation_volume_factor(self, pressure: List[float]) -> List[float]:
+        # 1 / (1 / B)
+        return self.compute_quantity(pressure, lambda p: 1.0 / self.fvf_recip(p))
+
+    def viscosity(self, pressure: List[float]) -> List[float]:
+        # (1 / B) / (1 / (B * mu)
+        return self.compute_quantity(
+            pressure, lambda p: self.fvf_recip(p) / self.fvf_mu_recip(p)
+        )
+
+    @staticmethod
+    def compute_quantity(
+        pressure: List[float], evaluate: Callable[[Any], Any]
+    ) -> List[float]:
+        result: List[float] = []
+
+        for p in pressure:
+            result.append(evaluate(p))
+
+        return result
+
+    def fvf_recip(self, point: float) -> float:
+        return self.inter_extrapolation(point)[0]
+
+    def fvf_mu_recip(self, point: float) -> float:
+        return self.inter_extrapolation(point)[1]
+
+
+class PVTx:
+    def __init__(
+        self, keys: List[float], property_interpolants: List[interpolate.interp1d]
+    ) -> None:
+        self.keys = keys
+        self.property_interpolants = property_interpolants
+
+        if len(self.keys) != len(self.property_interpolants):
+            raise ValueError(
+                "Size of Key Table Does not Match Number of Sub-Table Interpolants."
+            )
+
+        if len(self.keys) < 2:
+            raise ValueError(
+                "Mixing-Dependent Property Evaluator Must Have At Least Two Inner Tables"
+            )
+
+    def formation_volume_factor(key: List[float], x: List[float]) -> List[float]:
+        return self.compute_quantity(
+            key, x, lambda curve, point: self.property_interpolants[curve](point)[0]
+        )
+
+    @staticmethod
+    def compute_quantity(
+        key: List[float],
+        x: List[float],
+        inner_function: Callable,
+        outer_function: Callable,
+    ) -> List[float]:
+        results: List[float] = []
+
+        num_vals = len(key)
+
+        if len(x) != num_vals:
+            raise ValueError(
+                "Number of Inner Sampling Points Does Not Match Number of Outer Sampling Points."
+            )
+
+        for i in range(0, num_vals):
+            quantity = self.evaluate(key[i], x[i], inner_function)
+
+            result.append(quantity)
+
+        return result
+
+    def evaluate(self, key: float, x: float, func: Callable) -> np.ndarray:
+        
 
 
 class LiveOil(PvxOBase):
@@ -134,7 +720,81 @@ class LiveOil(PvxOBase):
 
 
 class DeadOil(PvxOBase):
-    pass
+    def __init__(
+        self,
+        indep: int,
+        raw: EclPropertyTableRawData,
+        convert: ConvertUnits,
+        columns: List[int],
+    ) -> None:
+        self.interpolant = PVDx(indep, raw, convert, columns)
+
+    def formation_volume_factor(
+        self, ratio: List[float], pressure: List[float]
+    ) -> List[float]:
+        return self.interpolant.formation_volume_factor(pressure)
+
+    def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        return self.interpolant.viscosity(pressure)
+
+
+class DeadOilConstCompr(PvxOBase):
+    def __init__(
+        self,
+        indep: int,
+        raw: EclPropertyTableRawData,
+        convert: ConvertUnits,
+        columns: List[int],
+    ) -> None:
+        self.rhos = 0.0
+
+        self.fvf = convert.column[0](raw.data[columns[0]])  # Bo
+        self.c_o = convert.column[1](raw.data[columns[1]])  # Co
+        self.visc = convert.column[2](raw.data[columns[2]])  # mu_o
+        self.c_v = convert.column[3](raw.data[columns[3]])  # Cv
+
+        self.p_o_ref = convert.independent(raw.data[indep])
+
+        if abs(self.p_o_ref) < 1.0e20:
+            raise ValueError("Invalid Input PVCDO Table")
+
+    def formation_volume_factor(
+        self, ratio: List[float], pressure: List[float]
+    ) -> List[float]:
+        return self._evaluate(pressure, lambda p: 1.0 / self._recip_fvf(p))
+
+    def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        return self._evaluate(
+            pressure, lambda p: self._recip_fvf(p) / self._recip_fvf_visc(p)
+        )
+
+    def _recip_fvf(self, p_o: float) -> float:
+        x = self.c_o * (p_o - self.p_o_ref)
+
+        return self._exp(x) / self.fvf
+
+    def surface_mass_density(self) -> float:
+        return self.rhos
+
+    def _recip_fvf_visc(self, p_o: float) -> float:
+        y = (self.c_o - self.c_v) * (p_o - self.p_o_ref)
+
+        return self._exp(y) / (self.fvf * self.visc)
+
+    @staticmethod
+    def _exp(x: float) -> float:
+        return 1.0 + x * (1.0 + x / 2.0)
+
+    @staticmethod
+    def _evaluate(
+        pressures: List[float], calculate: Callable[[Any], Any]
+    ) -> List[float]:
+        quantities: List[float] = []
+
+        for pressure in pressures:
+            quantities.append(calculate(pressure))
+
+        return quantities
 
 
 class WetGas(PvxOBase):
@@ -147,6 +807,31 @@ class DryGas(PvxOBase):
 
 class WaterImpl(PvxOBase):
     pass
+
+
+class MakeInterpolants:
+    @staticmethod
+    def from_raw_data(
+        raw: EclPropertyTableRawData,
+        construct: Callable[[int, EclPropertyTableRawData, List[int]], PvxOBase],
+    ) -> List[PvxOBase]:
+        interpolants: List[PvxOBase] = []
+
+        num_interpolants = raw.num_tables * raw.num_primary
+        col_stride = raw.num_rows * num_interpolants
+
+        begin: int = 0
+        columns: List[int] = [begin + col_stride]
+
+        for _ in range(1, raw.num_cols):
+            columns.append(columns[-1] + col_stride)
+
+        for _ in range(0, num_interpolants):
+            interpolants.append(construct(begin, raw, columns))
+            begin += raw.num_rows
+            columns = [x + raw.num_rows for x in columns]
+
+        return interpolants
 
 
 class Implementation:
@@ -180,15 +865,81 @@ class Implementation:
 
 class Oil(Implementation):
     def __init__(
-        self, raw: EclPropertyTableRawData, const_compr: bool, rhos: List[float]
+        self,
+        raw: EclPropertyTableRawData,
+        unit_system: int,
+        is_const_compr: bool,
+        rhos: List[float],
     ):
         super().__init__()
         self.rhos = rhos
-        self.values = self.create_pvt_function(raw, const_compr)
+        self.values = self.create_pvt_function(raw, is_const_compr, unit_system)
+
+    @staticmethod
+    def _formation_volume_factor(
+        unit_system: EclUnits.UnitSystem,
+    ) -> Callable[[float,], float]:
+        scale = unit_system.reservoir_volume() / unit_system.surface_volume_liquid()
+
+        return lambda x: Unit.Convert.from_(x, scale)
+
+    @staticmethod
+    def _viscosity(
+        unit_system: EclUnits.UnitSystem,
+    ) -> Callable[[float,], float]:
+        scale = unit_system.viscosity()
+
+        return lambda x: Unit.Convert.from_(x, scale)
+
+    @staticmethod
+    def dead_oil_unit_converter(
+        unit_system: Union[int, EclUnits.UnitSystem]
+    ) -> ConvertUnits:
+        if isinstance(unit_system, int):
+            unit_system = EclUnits.create_unit_system(unit_system)
+
+        return ConvertUnits(
+            CreateUnitConverter.ToSI.pressure(unit_system),
+            [
+                CreateUnitConverter.ToSI.recip_fvf(unit_system),
+                CreateUnitConverter.ToSI.recip_fvf_visc(unit_system),
+                CreateUnitConverter.ToSI.recip_fvf_deriv_press(unit_system),
+                CreateUnitConverter.ToSI.recip_fvf_visc_deriv_press(unit_system),
+            ],
+        )
+
+    @staticmethod
+    def pvcdo_unit_converter(
+        unit_system: Union[int, EclUnits.UnitSystem]
+    ) -> ConvertUnits:
+        if isinstance(unit_system, int):
+            unit_system = EclUnits.create_unit_system(unit_system)
+
+        return ConvertUnits(
+            CreateUnitConverter.ToSI.pressure(unit_system),
+            [
+                Oil._formation_volume_factor(unit_system),
+                CreateUnitConverter.ToSI.compressibility(unit_system),
+                Oil._viscosity(unit_system),
+                CreateUnitConverter.ToSI.compressibility(unit_system),
+            ],
+        )
+
+    @staticmethod
+    def live_oil_unit_converter(
+        unit_system: Union[int, EclUnits.UnitSystem]
+    ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
+        if isinstance(unit_system, int):
+            unit_system = EclUnits.create_unit_system(unit_system)
+
+        return (
+            CreateUnitConverter.ToSI.dissolved_gas_oil_ratio(unit_system),
+            Oil.dead_oil_unit_converter(unit_system),
+        )
 
     # pylint: disable=unused-argument
     def create_pvt_function(
-        self, raw: EclPropertyTableRawData, const_compr: bool
+        self, raw: EclPropertyTableRawData, is_const_compr: bool, unit_system: int
     ) -> List[PvxOBase]:
         if raw.num_primary == 0:
             raise super().InvalidArgument("Oil PVT table without primary lookup key")
@@ -206,11 +957,13 @@ class Oil(Implementation):
             )
 
         if raw.num_primary == 1:
-            return self.create_dead_oil(raw)
+            return self.create_dead_oil(raw, is_const_compr, unit_system)
 
-        return self.create_live_oil(raw)
+        return self.create_live_oil(raw, unit_system)
 
-    def create_live_oil(self, raw: EclPropertyTableRawData) -> List[PvxOBase]:
+    def create_live_oil(
+        self, raw: EclPropertyTableRawData, unit_system: int
+    ) -> List[PvxOBase]:
         # Holding raw.num_tables values
         ret: List[PvxOBase] = []
 
@@ -221,8 +974,9 @@ class Oil(Implementation):
         for index_table in range(0, raw.num_tables):
             values = []
 
-            # PKey  Inner   C0  C1          C2          C3
-            # Rs    Po      1/B 1/(B*mu)    d(1/B)/dPo  d(1/(B*mu))/dPo
+            # PKey   Inner   C0     C1         C2           C3
+            # Rs     Po      1/B    1/(B*mu)   d(1/B)/dPo   d(1/(B*mu))/dPo
+            #        :       :      :          :            :
 
             for index_primary in range(0, raw.num_primary):
                 if self.entry_valid(raw.primary_key[index_primary]):
@@ -260,62 +1014,34 @@ class Oil(Implementation):
 
         return ret
 
-    def create_dead_oil(self, raw: EclPropertyTableRawData) -> List[PvxOBase]:
+    def create_dead_oil(
+        self, raw: EclPropertyTableRawData, const_compr: bool, unit_system: int
+    ) -> List[PvxOBase]:
         # Holding raw.num_tables values
         ret: List[PvxOBase] = []
 
-        column_stride = raw.num_rows * raw.num_tables * raw.num_primary
-        table_stride = raw.num_primary * raw.num_rows
+        if const_compr:
+            cvrt = self.pvcdo_unit_converter(unit_system)
 
-        # pylint: disable=too-many-nested-blocks
-        for index_table in range(0, raw.num_tables):
-            values = []
+            return MakeInterpolants.from_raw_data(
+                raw,
+                lambda indep, raw, columns: DeadOilConstCompr(
+                    indep, raw, cvrt, columns
+                ),
+            )
 
-            # PKey  Inner   C0  C1          C2          C3
-            # Rs    Po      1/B 1/(B*mu)    d(1/B)/dPo  d(1/(B*mu))/dPo
+        cvrt = self.dead_oil_unit_converter(unit_system)
 
-            # Dead oil does only have one primary index
-            # TODO(Ruben) Shall the structure be kept anyways?
-            for index_primary in range(0, raw.num_primary):
-                if self.entry_valid(raw.primary_key[index_primary]):
-                    outer_value_pair = VariateAndValues()
-                    outer_value_pair.x = raw.primary_key[index_primary]
-                    # TODO(Ruben): Is there a better way to achieve this?
-                    temp_list: List[VariateAndValues] = []
-                    outer_value_pair.y = temp_list
-                    for index_row in range(0, raw.num_rows):
-                        pressure = raw.data[
-                            column_stride * 0
-                            + index_table * table_stride
-                            + index_primary * raw.num_rows
-                            + index_row
-                        ]
-                        if self.entry_valid(pressure):
-                            inner_value_pair = VariateAndValues()
-                            inner_value_pair.x = pressure
-                            inner_value_pair.y = [0.0 for col in range(1, raw.num_cols)]
-                            for index_column in range(1, raw.num_cols):
-                                inner_value_pair.y[index_column - 1] = raw.data[
-                                    column_stride * index_column
-                                    + index_table * table_stride
-                                    + index_primary * raw.num_rows
-                                    + index_row
-                                ]
-                            outer_value_pair.y.append(inner_value_pair)
-                        else:
-                            break
-                else:
-                    break
-
-                values.append(outer_value_pair)
-            ret.append(DeadOil(values))
-
-        return ret
+        return MakeInterpolants.from_raw_data(
+            raw, lambda indep, raw, columns: DeadOil(indep, raw, cvrt, columns)
+        )
 
     @staticmethod
     def from_ecl_init_file(ecl_init_file: EclFile) -> Optional["Oil"]:
+        intehead = ecl_init_file.__getitem__(InitFileDefinitions.INTEHEAD_KW)
+
         logihead = ecl_init_file.__getitem__(InitFileDefinitions.LOGIHEAD_KW)
-        is_const_compr = bool(logihead[const_compr_index()])
+        is_is_const_compr = bool(logihead[is_const_compr_index()])
 
         raw = EclPropertyTableRawData()
 
@@ -351,16 +1077,25 @@ class Oil(Implementation):
 
         rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Liquid)
 
-        return Oil(raw, is_const_compr, rhos)
+        return Oil(
+            raw,
+            is_is_const_compr,
+            intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
+            rhos,
+        )
 
 
 class Gas(Implementation):
-    def __init__(self, raw: EclPropertyTableRawData, rhos: List[float]):
+    def __init__(
+        self, raw: EclPropertyTableRawData, unit_system: int, rhos: List[float]
+    ):
         super().__init__()
         self.rhos = rhos
-        self.values = self.create_pvt_function(raw)
+        self.values = self.create_pvt_function(raw, unit_system)
 
-    def create_pvt_function(self, raw: EclPropertyTableRawData) -> List[PvxOBase]:
+    def create_pvt_function(
+        self, raw: EclPropertyTableRawData, unit_system: int
+    ) -> List[PvxOBase]:
         if raw.num_primary == 0:
             raise super().InvalidArgument("Gas PVT table without primary lookup key")
         if raw.num_cols != 5:
@@ -377,11 +1112,13 @@ class Gas(Implementation):
             )
 
         if raw.num_primary == 1:
-            return self.create_dry_gas(raw)
+            return self.create_dry_gas(raw, unit_system)
 
-        return self.create_wet_gas(raw)
+        return self.create_wet_gas(raw, unit_system)
 
-    def create_dry_gas(self, raw: EclPropertyTableRawData) -> List[PvxOBase]:
+    def create_dry_gas(
+        self, raw: EclPropertyTableRawData, unit_system: int
+    ) -> List[PvxOBase]:
         # Holding raw.num_tables values
         ret: List[PvxOBase] = []
 
@@ -392,8 +1129,9 @@ class Gas(Implementation):
         for index_table in range(0, raw.num_tables):
             values = []
 
-            # PKey  Inner   C0  C1          C2          C3
-            # Pg    Rv      1/B 1/(B*mu)    d(1/B)/dPg  d(1/(B*mu))/dPg
+            # Key     C0     C1         C2           C3
+            # Pg      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
+            # :       :      :          NaN          NaN
 
             for index_primary in range(0, raw.num_primary):
                 if self.entry_valid(raw.primary_key[index_primary]):
@@ -403,15 +1141,15 @@ class Gas(Implementation):
                     temp_list: List[VariateAndValues] = []
                     outer_value_pair.y = temp_list
                     for index_row in range(0, raw.num_rows):
-                        r_v = raw.data[
+                        pressure = raw.data[
                             column_stride * 0
                             + index_table * table_stride
                             + index_primary * raw.num_rows
                             + index_row
                         ]
-                        if self.entry_valid(r_v):
+                        if self.entry_valid(pressure):
                             inner_value_pair = VariateAndValues()
-                            inner_value_pair.x = r_v
+                            inner_value_pair.x = pressure
                             inner_value_pair.y = [0.0 for col in range(1, raw.num_cols)]
                             for index_column in range(1, raw.num_cols):
                                 inner_value_pair.y[index_column - 1] = raw.data[
@@ -432,7 +1170,9 @@ class Gas(Implementation):
 
         return ret
 
-    def create_wet_gas(self, raw: EclPropertyTableRawData) -> List[PvxOBase]:
+    def create_wet_gas(
+        self, raw: EclPropertyTableRawData, unit_system: int
+    ) -> List[PvxOBase]:
         # Holding raw.num_tables values
         ret: List[PvxOBase] = []
 
@@ -443,8 +1183,9 @@ class Gas(Implementation):
         for index_table in range(0, raw.num_tables):
             values = []
 
-            # PKey  Inner   C0  C1          C2          C3
-            # Pg    Rv      1/B 1/(B*mu)    d(1/B)/dPg  d(1/(B*mu))/dPg
+            # PKey   Inner   C0     C1         C2           C3
+            # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
+            #        :       :      :          :            :
 
             for index_primary in range(0, raw.num_primary):
                 if self.entry_valid(raw.primary_key[index_primary]):
@@ -527,16 +1268,20 @@ class Gas(Implementation):
 
         rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Vapour)
 
-        return Gas(raw, rhos)
+        return Gas(raw, intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX], rhos)
 
 
 class Water(Implementation):
-    def __init__(self, raw: EclPropertyTableRawData, rhos: List[float]):
+    def __init__(
+        self, raw: EclPropertyTableRawData, unit_system: int, rhos: List[float]
+    ):
         super().__init__()
         self.rhos = rhos
-        self.values = self.create_water(raw)
+        self.values = self.create_water(raw, unit_system)
 
-    def create_water(self, raw: EclPropertyTableRawData) -> List[PvxOBase]:
+    def create_water(
+        self, raw: EclPropertyTableRawData, unit_system: int
+    ) -> List[PvxOBase]:
         # Holding raw.num_tables values
         ret: List[PvxOBase] = []
 
@@ -609,4 +1354,4 @@ class Water(Implementation):
 
         rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Aqua)
 
-        return Water(raw, rhos)
+        return Water(raw, intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX], rhos)
