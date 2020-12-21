@@ -26,16 +26,10 @@ except ImportError:
 from webviz_config.common_cache import CACHE
 from webviz_config.webviz_store import webvizstore
 
-from .opm_init_io import (
-    Oil,
-    Gas,
-    Water,
-    DryGas,
-    LiveOil,
-    DeadOil,
-    VariateAndValues,
-)
 from .fmu_input import load_ensemble_set, load_csv
+from .opm_init_io.pvt_oil import Oil
+from .opm_init_io.pvt_gas import Gas
+from .opm_init_io.pvt_water import Water
 
 
 @CACHE.memoize(timeout=CACHE.TIMEOUT)
@@ -178,82 +172,105 @@ def load_pvt_dataframe(
         water = Water.from_ecl_init_file(ecl_init_file)
 
         column_pvtnum = []
-        column_oil_gas_ratio = []
+        column_ratio = []
         column_volume_factor = []
         column_pressure = []
         column_viscosity = []
         column_keyword = []
 
+        ratios: List[float] = []
+        pressures: List[float] = []
+        (pressure_min, pressure_max) = (0.0, 0.0)
+
+        if oil and not oil.is_dead_oil_const_compr():
+            (pressure_min, pressure_max) = oil.range_independent(0)
+        elif gas:
+            (pressure_min, pressure_max) = gas.range_independent(0)
+        else:
+            raise NotImplementedError("Missing PVT data")
+
+        for pressure_step in range(0, 20 + 1):
+            pressures.append(
+                pressure_min + pressure_step / 20.0 * (pressure_max - pressure_min)
+            )
+
         if oil:
-            if len(oil.tables()) > 0 and isinstance(oil.tables()[0], LiveOil):
+            if oil.is_live_oil():
                 keyword = "PVTO"
-            else:
+            elif oil.is_dead_oil():
                 keyword = "PVDO"
-            for table_index, table in enumerate(oil.tables()):
-                for outer_pair in table.get_values():
-                    for inner_pair in outer_pair.y:
-                        if isinstance(inner_pair, VariateAndValues):
-                            column_pvtnum.append(table_index + 1)
-                            column_keyword.append(keyword)
-                            if isinstance(table, DeadOil):
-                                column_oil_gas_ratio.append(0.0)
-                            else:
-                                column_oil_gas_ratio.append(outer_pair.x)
-                            column_pressure.append(inner_pair.x)
-                            column_volume_factor.append(
-                                1.0 / inner_pair.get_values_as_floats()[0]
-                            )
-                            column_viscosity.append(
-                                inner_pair.get_values_as_floats()[0]
-                                / inner_pair.get_values_as_floats()[1]
-                            )
+            elif oil.is_dead_oil_const_compr():
+                keyword = "PVCDO"
+            else:
+                raise NotImplementedError(
+                    "The PVT property type of oil is not implemented."
+                )
+
+            for region_index, region in enumerate(oil.regions()):
+                if oil.is_dead_oil_const_compr():
+                    column_pvtnum.append([region_index for _ in pressures])
+                    column_keyword.append([keyword for _ in pressures])
+                    column_ratio.append(ratios)
+                    column_pressure.append(pressures)
+                    column_volume_factor.append(
+                        region.formation_volume_factor(ratios, pressures)
+                    )
+                    column_viscosity.append(region.viscosity(ratios, pressures))
+
+                else:
+                    (ratio, pressure) = (
+                        region.get_keys(),
+                        region.get_independents(),
+                    )
+                    column_pvtnum.append([region_index for _ in pressure])
+                    column_keyword.append([keyword for _ in pressure])
+                    column_ratio.append(ratio)
+                    column_pressure.append(pressure)
+                    column_volume_factor.append(
+                        region.formation_volume_factor(ratio, pressure)
+                    )
+                    column_viscosity.append(region.viscosity(ratio, pressure))
 
         if gas:
-            if len(gas.tables()) > 0 and isinstance(gas.tables()[0], DryGas):
+            if gas.is_wet_gas():
+                keyword = "PVTG"
+            elif gas.is_dry_gas():
                 keyword = "PVDG"
             else:
-                keyword = "PVTG"
-            for table_index, table in enumerate(gas.tables()):
-                for outer_pair in table.get_values():
-                    for inner_pair in outer_pair.y:
-                        if isinstance(inner_pair, VariateAndValues):
-                            column_pvtnum.append(table_index + 1)
-                            column_keyword.append(keyword)
-                            if isinstance(table, DryGas):
-                                column_oil_gas_ratio.append(0.0)
-                            else:
-                                column_oil_gas_ratio.append(inner_pair.x)
-                            column_pressure.append(outer_pair.x)
-                            column_volume_factor.append(
-                                1.0 / inner_pair.get_values_as_floats()[0]
-                            )
-                            column_viscosity.append(
-                                inner_pair.get_values_as_floats()[0]
-                                / inner_pair.get_values_as_floats()[1]
-                            )
+                raise NotImplementedError(
+                    "The PVT property type of gas is not implemented."
+                )
+
+            for region_index, region in enumerate(gas.regions()):
+                (ratio, pressure) = (
+                    region.get_keys(),
+                    region.get_independents(),
+                )
+                column_pvtnum.append([region_index for _ in pressure])
+                column_keyword.append([keyword for _ in pressure])
+                column_ratio.append(ratio)
+                column_pressure.append(pressure)
+                column_volume_factor.append(
+                    region.formation_volume_factor(ratio, pressure)
+                )
+                column_viscosity.append(region.viscosity(ratio, pressure))
+
         if water:
-            for table_index, table in enumerate(water.tables()):
-                for outer_pair in table.get_values():
-                    for inner_pair in outer_pair.y:
-                        if isinstance(inner_pair, VariateAndValues):
-                            column_pvtnum.append(table_index + 1)
-                            column_keyword.append("PVTW")
-                            column_oil_gas_ratio.append(outer_pair.x)
-                            column_pressure.append(inner_pair.x)
-                            column_volume_factor.append(
-                                1.0 / inner_pair.get_values_as_floats()[0]
-                            )
-                            column_viscosity.append(
-                                1.0
-                                / inner_pair.get_values_as_floats()[2]
-                                * inner_pair.get_values_as_floats()[0]
-                            )
+            for region_index, region in enumerate(water.regions()):
+                column_pvtnum.append([region_index for _ in pressures])
+                column_keyword.append([keyword for _ in pressures])
+                column_ratio.append(ratios)
+                column_pressure.append(pressures)
+                column_volume_factor.append(
+                    region.formation_volume_factor(ratios, pressures)
+                )
+                column_viscosity.append(region.viscosity(ratios, pressures))
 
         data_frame = pd.DataFrame(
             {
                 "PVTNUM": column_pvtnum,
                 "KEYWORD": column_keyword,
-                "R": column_oil_gas_ratio,
+                "R": column_ratio,
                 "PRESSURE": column_pressure,
                 "VOLUMEFACTOR": column_volume_factor,
                 "VISCOSITY": column_viscosity,
