@@ -193,6 +193,7 @@ def load_pvt_dataframe(
             pressures.append(
                 pressure_min + pressure_step / 20.0 * (pressure_max - pressure_min)
             )
+            ratios.append(0.0)
 
         if oil:
             if oil.is_live_oil():
@@ -208,28 +209,28 @@ def load_pvt_dataframe(
 
             for region_index, region in enumerate(oil.regions()):
                 if oil.is_dead_oil_const_compr():
-                    column_pvtnum.append([region_index for _ in pressures])
-                    column_keyword.append([keyword for _ in pressures])
-                    column_ratio.append(ratios)
-                    column_pressure.append(pressures)
-                    column_volume_factor.append(
+                    column_pvtnum.extend([region_index for _ in pressures])
+                    column_keyword.extend([keyword for _ in pressures])
+                    column_ratio.extend(ratios)
+                    column_pressure.extend(pressures)
+                    column_volume_factor.extend(
                         region.formation_volume_factor(ratios, pressures)
                     )
-                    column_viscosity.append(region.viscosity(ratios, pressures))
+                    column_viscosity.extend(region.viscosity(ratios, pressures))
 
                 else:
                     (ratio, pressure) = (
                         region.get_keys(),
                         region.get_independents(),
                     )
-                    column_pvtnum.append([region_index for _ in pressure])
-                    column_keyword.append([keyword for _ in pressure])
-                    column_ratio.append(ratio)
-                    column_pressure.append(pressure)
-                    column_volume_factor.append(
+                    column_pvtnum.extend([region_index for _ in pressure])
+                    column_keyword.extend([keyword for _ in pressure])
+                    column_ratio.extend(ratio)
+                    column_pressure.extend(pressure)
+                    column_volume_factor.extend(
                         region.formation_volume_factor(ratio, pressure)
                     )
-                    column_viscosity.append(region.viscosity(ratio, pressure))
+                    column_viscosity.extend(region.viscosity(ratio, pressure))
 
         if gas:
             if gas.is_wet_gas():
@@ -246,25 +247,25 @@ def load_pvt_dataframe(
                     region.get_keys(),
                     region.get_independents(),
                 )
-                column_pvtnum.append([region_index for _ in pressure])
-                column_keyword.append([keyword for _ in pressure])
-                column_ratio.append(ratio)
-                column_pressure.append(pressure)
-                column_volume_factor.append(
+                column_pvtnum.extend([region_index for _ in pressure])
+                column_keyword.extend([keyword for _ in pressure])
+                column_ratio.extend(ratio)
+                column_pressure.extend(pressure)
+                column_volume_factor.extend(
                     region.formation_volume_factor(ratio, pressure)
                 )
-                column_viscosity.append(region.viscosity(ratio, pressure))
+                column_viscosity.extend(region.viscosity(ratio, pressure))
 
         if water:
             for region_index, region in enumerate(water.regions()):
-                column_pvtnum.append([region_index for _ in pressures])
-                column_keyword.append([keyword for _ in pressures])
-                column_ratio.append(ratios)
-                column_pressure.append(pressures)
-                column_volume_factor.append(
+                column_pvtnum.extend([region_index for _ in pressures])
+                column_keyword.extend(["PVTW" for _ in pressures])
+                column_ratio.extend(ratios)
+                column_pressure.extend(pressures)
+                column_volume_factor.extend(
                     region.formation_volume_factor(ratios, pressures)
                 )
-                column_viscosity.append(region.viscosity(ratios, pressures))
+                column_viscosity.extend(region.viscosity(ratios, pressures))
 
         data_frame = pd.DataFrame(
             {

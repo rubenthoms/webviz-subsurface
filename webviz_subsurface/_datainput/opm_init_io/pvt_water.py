@@ -132,7 +132,7 @@ class Water(Implementation):
 
         assert len(rhos) == len(ret)
 
-        self.__regions = ret
+        self._regions = ret
 
     @staticmethod
     def from_ecl_init_file(ecl_init_file: EclFile) -> Optional["Water"]:

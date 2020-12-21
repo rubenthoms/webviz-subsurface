@@ -123,6 +123,8 @@ class PvtPlot(WebvizPluginABC):
             self.phases_additional_info.append("PVTO")
         elif self.pvt_data_frame["KEYWORD"].str.contains("PVDO").any():
             self.phases_additional_info.append("PVDO")
+        elif self.pvt_data_frame["KEYWORD"].str.contains("PVCDO").any():
+            self.phases_additional_info.append("PVCDO")
         if self.pvt_data_frame["KEYWORD"].str.contains("PVTG").any():
             self.phases_additional_info.append("PVTG")
         elif self.pvt_data_frame["KEYWORD"].str.contains("PVDG").any():

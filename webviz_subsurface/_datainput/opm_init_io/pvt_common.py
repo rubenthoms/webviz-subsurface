@@ -78,8 +78,8 @@ class PVDx:
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
     ) -> None:
-        self.x: np.ndarray = np.zeros(raw.num_rows)
-        self.y: np.ndarray = np.zeros((raw.num_rows, raw.num_cols))
+        self.x: np.ndarray
+        self.y: np.ndarray = np.zeros((0, 0))
 
         column_stride = raw.num_rows * raw.num_tables * raw.num_primary
         table_stride = raw.num_primary * raw.num_rows
@@ -87,7 +87,6 @@ class PVDx:
         for index_primary in range(0, raw.num_primary):
             if self.entry_valid(raw.primary_key[index_primary]):
                 for index_row in range(0, raw.num_rows):
-                    current_index = index_primary * raw.num_rows + index_row
                     current_stride = (
                         index_table * table_stride
                         + index_primary * raw.num_rows
@@ -95,14 +94,22 @@ class PVDx:
                     )
 
                     if self.entry_valid(raw.data[column_stride * 0 + current_stride]):
-                        self.x[current_index] = convert.independent(
-                            raw.data[column_stride * 0 + current_stride]
+                        self.x = np.append(
+                            self.x,
+                            convert.independent(
+                                raw.data[column_stride * 0 + current_stride]
+                            ),
                         )
 
                         for index_column in range(1, raw.num_cols):
-                            self.y[index_column][current_index] = convert.column[
-                                index_column - 1
-                            ](raw.data[column_stride * index_column + current_stride])
+                            self.y[index_column] = np.append(
+                                self.y[index_column],
+                                convert.column[index_column - 1](
+                                    raw.data[
+                                        column_stride * index_column + current_stride
+                                    ]
+                                ),
+                            )
 
                     else:
                         break
@@ -172,10 +179,9 @@ class PVTx:
             ConvertUnits,
         ],
     ) -> None:
-        size = raw.num_primary * raw.num_rows
-        self.keys: np.ndarray = np.zeros(size)
-        self.x: np.ndarray = np.zeros(size)
-        self.y: List[np.ndarray] = [np.zeros(size) for i in range(0, raw.num_cols)]
+        self.keys: np.ndarray = np.zeros(0)
+        self.x: np.ndarray = np.zeros(0)
+        self.y: List[np.ndarray] = [np.zeros(0) for _ in range(1, raw.num_cols)]
 
         column_stride = raw.num_rows * raw.num_tables * raw.num_primary
         table_stride = raw.num_primary * raw.num_rows
@@ -183,7 +189,6 @@ class PVTx:
         for index_primary in range(0, raw.num_primary):
             if self.entry_valid(raw.primary_key[index_primary]):
                 for index_row in range(0, raw.num_rows):
-                    current_index = index_primary * raw.num_rows + index_row
                     current_stride = (
                         index_table * table_stride
                         + index_primary * raw.num_rows
@@ -191,17 +196,25 @@ class PVTx:
                     )
 
                     if self.entry_valid(raw.data[column_stride * 0 + current_stride]):
-                        self.keys[current_index] = convert[0](
-                            raw.primary_key[index_primary]
+                        self.keys = np.append(
+                            self.keys, convert[0](raw.primary_key[index_primary])
                         )
-                        self.x[current_index] = convert[1].independent(
-                            raw.data[column_stride * 0 + current_stride]
+                        self.x = np.append(
+                            self.x,
+                            convert[1].independent(
+                                raw.data[column_stride * 0 + current_stride]
+                            ),
                         )
 
                         for index_column in range(1, raw.num_cols):
-                            self.y[index_column - 1][current_index] = convert[1].column[
-                                index_column - 1
-                            ](raw.data[column_stride * index_column + current_stride])
+                            self.y[index_column - 1] = np.append(
+                                self.y[index_column - 1],
+                                convert[1].column[index_column - 1](
+                                    raw.data[
+                                        column_stride * index_column + current_stride
+                                    ]
+                                ),
+                            )
 
                     else:
                         break
@@ -212,7 +225,7 @@ class PVTx:
 
         for index_column in range(0, raw.num_cols - 1):
             self.interpolants.append(
-                extrap1d(interpolate.interp2d(self.keys, self.x, self.y[index_column]))
+                interpolate.interp2d(self.keys, self.x, self.y[index_column])
             )
 
     def get_keys(self) -> List[float]:
