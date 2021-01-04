@@ -4,7 +4,7 @@
 #
 ########################################
 
-from typing import List, Callable, Tuple, Any
+from typing import List, Callable, Tuple, Any, Optional
 from enum import Enum
 
 from scipy import interpolate
@@ -153,15 +153,15 @@ class PVDx:
         result: List[float] = []
 
         for pressure in pressures:
-            result.append(evaluate(pressure))
+            result.append(float(evaluate(pressure)))
 
         return result
 
     def fvf_recip(self, point: float) -> float:
-        return self.inter_extrapolation(point)[0]
+        return float(self.inter_extrapolation(point)[0])
 
     def fvf_mu_recip(self, point: float) -> float:
-        return self.inter_extrapolation(point)[1]
+        return float(self.inter_extrapolation(point)[1])
 
 
 class PVTx:
@@ -279,7 +279,7 @@ class PVTx:
         for i in range(0, num_vals):
             quantity = self.evaluate(key[i], x[i], inner_function)
 
-            results.append(outer_function(quantity))
+            results.append(float(outer_function(quantity)))
 
         return results
 
@@ -376,8 +376,42 @@ class Implementation:
         def __init__(self) -> None:
             super().__init__("Invalid type. Only live oil/wet gas/water supported.")
 
-    def __init__(self) -> None:
+    def __init__(self, keep_unit_system: bool = False) -> None:
         self._regions: List[PvxOBase] = []
+        self.keep_unit_system = keep_unit_system
+
+    def pvdx_unit_converter(self) -> Optional[ConvertUnits]:
+        if self.keep_unit_system:
+            return ConvertUnits(
+                lambda x: x,
+                [
+                    lambda x: x,
+                    lambda x: x,
+                    lambda x: x,
+                    lambda x: x,
+                ],
+            )
+        else:
+            return None
+
+    def pvtx_unit_converter(
+        self,
+    ) -> Optional[Tuple[Callable[[float,], float,], ConvertUnits]]:
+        if self.keep_unit_system:
+            return (
+                lambda x: x,
+                ConvertUnits(
+                    lambda x: x,
+                    [
+                        lambda x: x,
+                        lambda x: x,
+                        lambda x: x,
+                        lambda x: x,
+                    ],
+                ),
+            )
+        else:
+            return None
 
     def formation_volume_factor(
         self, region_index: int, ratio: List[float], pressure: List[float]

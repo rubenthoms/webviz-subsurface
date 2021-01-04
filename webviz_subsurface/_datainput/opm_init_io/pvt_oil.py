@@ -8,7 +8,7 @@ from typing import Tuple, Callable, List, Any, Union, Optional
 
 from opm.io.ecl import EclFile
 
-from ..opm_unit import ConvertUnits, EclUnits, Unit, CreateUnitConverter
+from ..opm_unit import ConvertUnits, EclUnits, Unit, CreateUnitConverter, ErtEclUnitEnum
 from .pvt_common import (
     is_const_compr_index,
     surface_mass_density,
@@ -164,9 +164,11 @@ class Oil(Implementation):
         unit_system: int,
         is_const_compr: bool,
         rhos: List[float],
+        keep_unit_system: bool = False,
     ):
-        super().__init__()
+        super().__init__(keep_unit_system)
         self.rhos = rhos
+        self.original_unit_system = ErtEclUnitEnum(unit_system)
         self.create_pvt_function(raw, is_const_compr, unit_system)
 
     @staticmethod
@@ -185,14 +187,13 @@ class Oil(Implementation):
 
         return lambda x: Unit.Convert.from_(x, scale)
 
-    @staticmethod
     def dead_oil_unit_converter(
-        unit_system: Union[int, EclUnits.UnitSystem]
+        self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
-        return ConvertUnits(
+        return super().pvdx_unit_converter() or ConvertUnits(
             CreateUnitConverter.ToSI.pressure(unit_system),
             [
                 CreateUnitConverter.ToSI.recip_fvf(unit_system),
@@ -202,14 +203,13 @@ class Oil(Implementation):
             ],
         )
 
-    @staticmethod
     def pvcdo_unit_converter(
-        unit_system: Union[int, EclUnits.UnitSystem]
+        self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
-        return ConvertUnits(
+        return super().pvdx_unit_converter() or ConvertUnits(
             CreateUnitConverter.ToSI.pressure(unit_system),
             [
                 Oil._formation_volume_factor(unit_system),
@@ -219,16 +219,15 @@ class Oil(Implementation):
             ],
         )
 
-    @staticmethod
     def live_oil_unit_converter(
-        unit_system: Union[int, EclUnits.UnitSystem]
+        self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
-        return (
+        return super().pvtx_unit_converter() or (
             CreateUnitConverter.ToSI.dissolved_gas_oil_ratio(unit_system),
-            Oil.dead_oil_unit_converter(unit_system),
+            self.dead_oil_unit_converter(unit_system),
         )
 
     # pylint: disable=unused-argument
@@ -299,7 +298,9 @@ class Oil(Implementation):
         return False
 
     @staticmethod
-    def from_ecl_init_file(ecl_init_file: EclFile) -> Optional["Oil"]:
+    def from_ecl_init_file(
+        ecl_init_file: EclFile, keep_unit_system: bool = False
+    ) -> Optional["Oil"]:
         intehead = ecl_init_file.__getitem__(InitFileDefinitions.INTEHEAD_KW)
 
         logihead = ecl_init_file.__getitem__(InitFileDefinitions.LOGIHEAD_KW)
@@ -344,4 +345,5 @@ class Oil(Implementation):
             intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
             is_is_const_compr,
             rhos,
+            keep_unit_system,
         )

@@ -167,9 +167,10 @@ def load_pvt_dataframe(
             kwargs["realization"].get_eclfiles().get_initfile().get_filename()
         )
 
-        oil = Oil.from_ecl_init_file(ecl_init_file)
-        gas = Gas.from_ecl_init_file(ecl_init_file)
-        water = Water.from_ecl_init_file(ecl_init_file)
+        # Keep the original unit system
+        oil = Oil.from_ecl_init_file(ecl_init_file, True)
+        gas = Gas.from_ecl_init_file(ecl_init_file, True)
+        water = Water.from_ecl_init_file(ecl_init_file, True)
 
         column_pvtnum = []
         column_ratio = []
@@ -243,7 +244,7 @@ def load_pvt_dataframe(
                 )
 
             for region_index, region in enumerate(gas.regions()):
-                (ratio, pressure) = (
+                (pressure, ratio) = (
                     region.get_keys(),
                     region.get_independents(),
                 )

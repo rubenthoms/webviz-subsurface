@@ -8,7 +8,7 @@ from typing import Callable, List, Any, Union, Optional
 
 from opm.io.ecl import EclFile
 
-from ..opm_unit import ConvertUnits, EclUnits, CreateUnitConverter
+from ..opm_unit import ConvertUnits, EclUnits, CreateUnitConverter, ErtEclUnitEnum
 from .pvt_common import (
     surface_mass_density,
     InitFileDefinitions,
@@ -94,20 +94,24 @@ class WaterImpl(PvxOBase):
 
 class Water(Implementation):
     def __init__(
-        self, raw: EclPropertyTableRawData, unit_system: int, rhos: List[float]
+        self,
+        raw: EclPropertyTableRawData,
+        unit_system: int,
+        rhos: List[float],
+        keep_unit_system: bool = False,
     ):
-        super().__init__()
+        super().__init__(keep_unit_system)
         self.rhos = rhos
+        self.original_unit_system = ErtEclUnitEnum(unit_system)
         self.create_water(raw, unit_system, rhos)
 
-    @staticmethod
     def water_unit_converter(
-        unit_system: Union[int, EclUnits.UnitSystem]
+        self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
-        return ConvertUnits(
+        return super().pvdx_unit_converter() or ConvertUnits(
             CreateUnitConverter.ToSI.pressure(unit_system),
             [
                 CreateUnitConverter.ToSI.recip_fvf(unit_system),
@@ -135,7 +139,9 @@ class Water(Implementation):
         self._regions = ret
 
     @staticmethod
-    def from_ecl_init_file(ecl_init_file: EclFile) -> Optional["Water"]:
+    def from_ecl_init_file(
+        ecl_init_file: EclFile, keep_unit_system: bool = False
+    ) -> Optional["Water"]:
         intehead = ecl_init_file.__getitem__(InitFileDefinitions.INTEHEAD_KW)
         intehead_phase = intehead[InitFileDefinitions.INTEHEAD_PHASE_INDEX]
 
@@ -163,4 +169,9 @@ class Water(Implementation):
 
         rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Aqua)
 
-        return Water(raw, intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX], rhos)
+        return Water(
+            raw,
+            intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
+            rhos,
+            keep_unit_system,
+        )

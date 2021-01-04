@@ -8,7 +8,7 @@ from typing import Tuple, Callable, List, Union, Optional
 
 from opm.io.ecl import EclFile
 
-from ..opm_unit import ConvertUnits, EclUnits, CreateUnitConverter
+from ..opm_unit import ConvertUnits, EclUnits, CreateUnitConverter, ErtEclUnitEnum
 from .pvt_common import (
     surface_mass_density,
     InitFileDefinitions,
@@ -43,10 +43,18 @@ class WetGas(PvxOBase):
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
-        return self.interpolant.formation_volume_factor(ratio, pressure)
+        # Remember:
+        # PKey   Inner   C0     C1         C2           C3
+        # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
+        #        :       :      :          :            :
+        return self.interpolant.formation_volume_factor(pressure, ratio)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
-        return self.interpolant.viscosity(ratio, pressure)
+        # Remember:
+        # PKey   Inner   C0     C1         C2           C3
+        # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
+        #        :       :      :          :            :
+        return self.interpolant.viscosity(pressure, ratio)
 
     def get_keys(self) -> List[float]:
         return self.interpolant.get_keys()
@@ -82,10 +90,15 @@ class DryGas(PvxOBase):
 
 class Gas(Implementation):
     def __init__(
-        self, raw: EclPropertyTableRawData, unit_system: int, rhos: List[float]
+        self,
+        raw: EclPropertyTableRawData,
+        unit_system: int,
+        rhos: List[float],
+        keep_unit_system: bool = False,
     ):
-        super().__init__()
+        super().__init__(keep_unit_system)
         self.rhos = rhos
+        self.original_unit_system = ErtEclUnitEnum(unit_system)
         self.create_pvt_function(raw, unit_system)
 
     def create_pvt_function(
@@ -111,14 +124,13 @@ class Gas(Implementation):
 
         self.create_wet_gas(raw, unit_system)
 
-    @staticmethod
     def dry_gas_unit_converter(
-        unit_system: Union[int, EclUnits.UnitSystem]
+        self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
-        return ConvertUnits(
+        return super().pvdx_unit_converter() or ConvertUnits(
             CreateUnitConverter.ToSI.pressure(unit_system),
             [
                 CreateUnitConverter.ToSI.recip_fvf_gas(unit_system),
@@ -128,14 +140,13 @@ class Gas(Implementation):
             ],
         )
 
-    @staticmethod
     def wet_gas_unit_converter(
-        unit_system: Union[int, EclUnits.UnitSystem]
+        self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
-        return (
+        return super().pvtx_unit_converter() or (
             CreateUnitConverter.ToSI.pressure(unit_system),
             ConvertUnits(
                 CreateUnitConverter.ToSI.vaporised_oil_gas_ratio(unit_system),
@@ -154,9 +165,9 @@ class Gas(Implementation):
         cvrt = self.dry_gas_unit_converter(unit_system)
 
         self._regions = MakeInterpolants.from_raw_data(
-            # PKey   Inner   C0     C1         C2           C3
-            # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
-            #        :       :      :          :            :
+            # Inner   C0     C1         C2           C3
+            # Pg      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
+            #         :       :         :            :
             raw,
             lambda table_index, raw: DryGas(table_index, raw, cvrt),
         )
@@ -183,7 +194,9 @@ class Gas(Implementation):
         return False
 
     @staticmethod
-    def from_ecl_init_file(ecl_init_file: EclFile) -> Optional["Gas"]:
+    def from_ecl_init_file(
+        ecl_init_file: EclFile, keep_unit_system: bool = False
+    ) -> Optional["Gas"]:
         intehead = ecl_init_file.__getitem__(InitFileDefinitions.INTEHEAD_KW)
         intehead_phase = intehead[InitFileDefinitions.INTEHEAD_PHASE_INDEX]
 
@@ -226,4 +239,9 @@ class Gas(Implementation):
 
         rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Vapour)
 
-        return Gas(raw, intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX], rhos)
+        return Gas(
+            raw,
+            intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
+            rhos,
+            keep_unit_system,
+        )

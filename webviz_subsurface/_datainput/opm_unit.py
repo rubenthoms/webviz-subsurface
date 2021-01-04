@@ -5,103 +5,254 @@
 ########################################
 
 from enum import IntEnum
-from typing import List, Callable
+from typing import List, Callable, Union
 
 
 class ErtEclUnitEnum(IntEnum):
+    ECL_SI_UNITS = 0
     ECL_METRIC_UNITS = 1
     ECL_FIELD_UNITS = 2
     ECL_LAB_UNITS = 3
     ECL_PVT_M_UNITS = 4
 
 
+def unit_system_name(unit_system: ErtEclUnitEnum) -> str:
+    if unit_system == ErtEclUnitEnum.ECL_SI_UNITS:
+        return "SI"
+    elif unit_system == ErtEclUnitEnum.ECL_METRIC_UNITS:
+        return "METRIC"
+    elif unit_system == ErtEclUnitEnum.ECL_FIELD_UNITS:
+        return "FIELD"
+    elif unit_system == ErtEclUnitEnum.ECL_LAB_UNITS:
+        return "LAB"
+    elif unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
+        return "PVT"
+    else:
+        return "UNKNOWN"
+
+
+class UnitBase:
+    pass
+
+
+# pylint: disable=too-few-public-methods
 class Prefix:
-    micro = 1.0e-6
-    milli = 1.0e-3
-    centi = 1.0e-2
-    deci = 1.0e-1
-    kilo = 1.0e3
-    mega = 1.0e6
-    giga = 1.0e9
+    class Base:
+        def __init__(self, value: float, symbol: str) -> None:
+            self.value = value
+            self.symbol = symbol
+
+        def __mul__(self, other):  # type: ignore[no-untyped-def]
+            if issubclass(other, UnitBase):
+                return other.__class__(
+                    self.value * other.value, f"{self.symbol}{other.symbol}"
+                )
+            elif isinstance(other, float):
+                return self.value * other
+            else:
+                raise TypeError("Can only be multiplied with a unit or a float.")
+
+        def __add__(self, other):  # type: ignore[no-untyped-def]
+            raise NotImplementedError(
+                "Prefixes can only be multiplied with either Units or floats."
+            )
+
+        def __sub__(self, other):  # type: ignore[no-untyped-def]
+            raise NotImplementedError(
+                "Prefixes can only be multiplied with either Units or floats."
+            )
+
+        def __truediv__(self, other):  # type: ignore[no-untyped-def]
+            raise NotImplementedError(
+                "Prefixes can only be multiplied with either Units or floats."
+            )
+
+    micro = Base(1.0e-6, "\u00B5")
+    milli = Base(1.0e-3, "m")
+    centi = Base(1.0e-2, "c")
+    deci = Base(1.0e-1, "d")
+    kilo = Base(1.0e3, "k")
+    mega = Base(1.0e6, "M")
+    giga = Base(1.0e9, "G")
 
 
 class Unit:
 
+    # Base class for units
+    class Base(UnitBase):
+        def __init__(self, value: Union[float, "Base"], symbol: str) -> None:  # type: ignore[name-defined]
+            if isinstance(value, float):
+                self.value = value
+                self.symbol = symbol
+            else:
+                self.value = value.value
+                self.symbol = symbol
+
+            self.tidy_symbol()
+
+        def tidy_symbol(self) -> None:
+            self.symbol = "".join(self.symbol.split())
+            numerator: List[str] = [
+                "",
+            ]
+            denominator: List[str] = [
+                "",
+            ]
+
+            in_parantheses = False
+            in_denominator = False
+
+            for char in self.symbol:
+                if char == "*":
+                    numerator.append("")
+                    if not in_parantheses:
+                        in_denominator = False
+                elif char == "/":
+                    denominator.append("")
+                    in_denominator = True
+                elif char == "(":
+                    in_parantheses = True
+                elif char == ")":
+                    in_parantheses = False
+                elif in_denominator:
+                    denominator[-1] += char
+                else:
+                    numerator[-1] += char
+
+            self.symbol = ""
+
+            for num in numerator:
+                check = False
+                for denom in denominator:
+                    if num == denom:
+                        check = True
+                        denominator.remove(denom)
+                        break
+
+                if not check:
+                    if self.symbol == "":
+                        self.symbol += num
+                    else:
+                        self.symbol += f"*{num}"
+
+            self.symbol += "/("
+
+            for denom in denominator:
+                if self.symbol[-1] == "(":
+                    self.symbol += denom
+                else:
+                    self.symbol += f"*{num}"
+
+        def __mul__(self, other):  # type: ignore[no-untyped-def]
+            if type(other) is type(self):
+                return self.__class__(
+                    self.value * other.value, f"{self.symbol}*{other.symbol}"
+                )
+            elif isinstance(other, Prefix):
+                return self.__class__(
+                    self.value * other.value, f"{self.symbol}*{other.symbol}"
+                )
+            elif isinstance(other, float):
+                return self.__class__(self.value * other, self.symbol)
+            elif isinstance(other, int):
+                return self.__class__(self.value * float(other), self.symbol)
+            else:
+                raise TypeError(
+                    "You can only multiply this unit with another unit, a float or an integer."
+                )
+
+        def __truediv__(self, other):  # type: ignore[no-untyped-def]
+            if type(other) is type(self):
+                return self.__class__(
+                    self.value / other.value, f"{self.symbol}/({other.symbol})"
+                )
+            elif isinstance(other, float):
+                return self.__class__(self.value / other, self.symbol)
+            elif isinstance(other, int):
+                return self.__class__(self.value / float(other), self.symbol)
+            else:
+                raise TypeError(
+                    "You can only divide this unit by another unit, a float or an integer."
+                )
+
     # Common powers
     @staticmethod
-    def square(value: float) -> float:
+    def square(value: Base) -> Base:
         return value * value
 
     @staticmethod
-    def cubic(value: float) -> float:
+    def cubic(value: Base) -> Base:
         return value * value * value
 
     #############################
     # Basic units and conversions
     #############################
 
-    # Length
-    meter = 1.0
-    inch = 2.54 * Prefix.centi * meter
-    feet = 12 * inch
+    meter = Base(1.0, "m")
+
+    inch = Base(Prefix.centi * meter * 2.54, "inch")
+
+    feet = Base(inch * 12.0, "ft")
 
     # Time
-    second = 1.0
-    minute = 60.0 * second
-    hour = 60.0 * minute
-    day = 24.0 * hour
-    year = 365.0 * day
+    second = Base(1.0, "s")
+    minute = Base(second * 60.0, "m")
+    hour = Base(minute * 60.0, "h")
+    day = Base(hour.value * 24.0, "d")
+    year = Base(day.value * 365.0, "a")
 
     # Volume
-    gallon = 231.0 * cubic.__func__(inch)  # type: ignore[attr-defined]
-    stb = 42.0 * gallon
-    liter = 1.0 * cubic.__func__(Prefix.deci * meter)  # type: ignore[attr-defined]
+    gallon = Base(cubic.__func__(inch) * 231.0, "gal")  # type: ignore[attr-defined]
+    stb = Base(gallon * 42.0, "stb")
+    liter = Base(cubic.__func__(Prefix.deci * meter.value), "l")  # type: ignore[attr-defined]
 
     # Mass
-    kilogram = 1.0
-    gram = 1.0e-3 * kilogram
-    pound = 0.45359237 * kilogram
+    kilogram = Base(1.0, "kg")
+    gram = Base(kilogram * 1.0e-3, "g")
+    pound = Base(kilogram * 0.45359237, "lb")
 
     # Energy
-    joule = 1.0
-    btu = 1054.3503 * joule
+    joule = Base(1.0, "J")
+    btu = Base(joule * 1054.3503, "Btu")
 
     # Standardised constant
-    gravity = 9.80665 * meter / square.__func__(second)  # type: ignore[attr-defined]
+    gravity = (meter * 9.80665) / square.__func__(second)  # type: ignore[attr-defined]
 
     ###############################
     # Derived units and conversions
     ###############################
 
     # Force
-    Newton = kilogram * meter / square.__func__(second)  # type: ignore[attr-defined]
-    dyne = 1.0e-5 * Newton
-    lbf = pound * gravity
+    Newton = Base(kilogram * meter / square.__func__(second), "N")  # type: ignore[attr-defined]
+    dyne = Base(Newton * 1.0e-5, "dyn")
+    lbf = Base(pound * gravity, "lbf")
 
     # Pressure
-    Pascal = Newton / square.__func__(meter)  # type: ignore[attr-defined]
-    barsa = 100000.0 * Pascal
-    atm = 101325.0 * Pascal
-    psia = lbf / square.__func__(inch)  # type: ignore[attr-defined]
+    Pascal = Base(Newton / square.__func__(meter), "Pa")  # type: ignore[attr-defined]
+    barsa = Base(Pascal * 100000.0, "bar")
+    atm = Base(Pascal * 101325.0, "atm")
+    psia = Base(lbf / square.__func__(inch), "psi")  # type: ignore[attr-defined]
 
     # Temperature
-    deg_celsius = 1.0
+    deg_celsius = Base(1.0, "\u2103")
     deg_celsius_offset = 273.15
 
-    deg_fahrenheit = 5.0 / 9.0
+    deg_fahrenheit = Base(5.0 / 9.0, "\u2109")
     deg_fahrenheit_offset = 255.37
 
     # Viscosity
     Pas = Pascal * second
-    Poise = Prefix.deci * Pas
+    Poise = Base(Prefix.deci * Pas, "P")
 
     # Permeability
     p_grad = atm / (Prefix.centi * meter)
     area = square.__func__(Prefix.centi * meter)  # type: ignore[attr-defined]
+    # pylint: disable=line-too-long
     flux = cubic.__func__(Prefix.centi * meter) / second  # type: ignore[attr-defined]
+    # pylint: enable=line-too-long
     velocity = flux / area
-    visc = Prefix.centi * Poise
-    darcy = (velocity * visc) / p_grad
+    visc = Base(Prefix.centi * Poise, "cP")
+    darcy = Base((velocity * visc) / p_grad, "D")
 
     class Convert:
         @staticmethod
@@ -216,47 +367,52 @@ class UnitSystems:
         Energy = Prefix.kilo * Unit.joule
 
 
+class UnitSystemUnits:
+    class Metric:
+        Pressure = Unit
+
+
 class EclUnits:
     class UnitSystem:
         @staticmethod
         def density() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def depth() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def pressure() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def reservoir_rate() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def reservoir_volume() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def surface_volume_gas() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def surface_volume_liquid() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def time() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def transmissibility() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
         def viscosity() -> float:
-            return 0.0
+            raise NotImplementedError("The base class cannot be called directly.")
 
         def dissolved_gas_oil_ratio(self) -> float:
             return self.surface_volume_gas() / self.surface_volume_liquid()

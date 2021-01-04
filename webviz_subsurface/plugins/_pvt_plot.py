@@ -17,6 +17,7 @@ from webviz_config.common_cache import CACHE
 from webviz_config import WebvizPluginABC
 
 from .._datainput.pvt_data import load_pvt_dataframe, load_pvt_csv
+from .._datainput.opm_unit import unit_system_name, ErtEclUnitEnum
 
 
 class PvtPlot(WebvizPluginABC):
@@ -171,6 +172,15 @@ class PvtPlot(WebvizPluginABC):
         return ["ENSEMBLE", "PVTNUM"]
 
     @property
+    def unit_systems(self) -> Dict[int, str]:
+        return dict(
+            [
+                (ErtEclUnitEnum(i), unit_system_name(ErtEclUnitEnum(i)))
+                for i in range(1, 5)
+            ]
+        )
+
+    @property
     def tour_steps(self) -> List[dict]:
         return [
             {
@@ -299,6 +309,30 @@ class PvtPlot(WebvizPluginABC):
                                         {"label": i, "value": i} for i in self.pvtnums
                                     ],
                                     value=self.pvtnums[0],
+                                    persistence=True,
+                                    persistence_type="session",
+                                ),
+                            ],
+                        ),
+                        html.Label(
+                            id=self.uuid("unit_system_selector"),
+                            children=[
+                                html.Span(
+                                    "Unit system",
+                                    style={"font-weight": "bold"},
+                                ),
+                                dcc.Dropdown(
+                                    id=self.uuid("unit_system"),
+                                    clearable=False,
+                                    options=[
+                                        {
+                                            "label": f"{name.lower().capitalize()}",
+                                            "value": enum,
+                                        }
+                                        for enum, name in self.unit_systems.items()
+                                    ],
+                                    multi=False,
+                                    value=list(self.unit_systems.keys())[0],
                                     persistence=True,
                                     persistence_type="session",
                                 ),
@@ -483,6 +517,7 @@ def add_realization_traces(
         dim1_column_name = "PRESSURE"
     else:
         data_frame = data_frame.loc[data_frame["KEYWORD"] == "PVTW"]
+        dim1_column_name = "PRESSURE"
 
     border_value_pressure: Dict[str, list] = {}
     border_value_viscosity: Dict[str, list] = {}
