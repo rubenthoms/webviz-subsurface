@@ -101,6 +101,24 @@ class Gas(Implementation):
         self.original_unit_system = ErtEclUnitEnum(unit_system)
         self.create_pvt_function(raw, unit_system)
 
+    def formation_volume_factor_unit(self) -> str:
+        unit_system = EclUnits.create_unit_system(
+            self.original_unit_system
+            if self.keep_unit_system
+            else ErtEclUnitEnum.ECL_SI_UNITS
+        )
+
+        return fr"${{r{unit_system.reservoir_volume().symbol}}}/{{s{unit_system.surface_volume_gas().symbol}}}$"
+
+    def viscosity_unit(self) -> str:
+        unit_system = EclUnits.create_unit_system(
+            self.original_unit_system
+            if self.keep_unit_system
+            else ErtEclUnitEnum.ECL_SI_UNITS
+        )
+
+        return fr"${unit_system.viscosity().symbol}$"
+
     def create_pvt_function(
         self, raw: EclPropertyTableRawData, unit_system: int
     ) -> None:

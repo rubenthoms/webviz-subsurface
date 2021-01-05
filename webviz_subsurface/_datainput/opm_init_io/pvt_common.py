@@ -11,7 +11,7 @@ from scipy import interpolate
 import numpy as np
 from opm.io.ecl import EclFile
 
-from ..opm_unit import ConvertUnits
+from ..opm_unit import ConvertUnits, EclUnits, ErtEclUnitEnum
 
 
 class EclPropertyTableRawData:  # pylint: disable=too-few-public-methods
@@ -379,6 +379,7 @@ class Implementation:
     def __init__(self, keep_unit_system: bool = False) -> None:
         self._regions: List[PvxOBase] = []
         self.keep_unit_system = keep_unit_system
+        self.original_unit_system = ErtEclUnitEnum.ECL_SI_UNITS
 
     def pvdx_unit_converter(self) -> Optional[ConvertUnits]:
         if self.keep_unit_system:
@@ -413,6 +414,15 @@ class Implementation:
         else:
             return None
 
+    def pressure_unit(self) -> str:
+        unit_system = EclUnits.create_unit_system(
+            self.original_unit_system
+            if self.keep_unit_system
+            else ErtEclUnitEnum.ECL_SI_UNITS
+        )
+
+        return fr"${unit_system.pressure().symbol}$"
+
     def formation_volume_factor(
         self, region_index: int, ratio: List[float], pressure: List[float]
     ) -> List[float]:
@@ -420,12 +430,18 @@ class Implementation:
 
         return self._regions[region_index].formation_volume_factor(ratio, pressure)
 
+    def formation_volume_factor_unit(self) -> str:
+        raise NotImplementedError("This method cannot be called from the base class.")
+
     def viscosity(
         self, region_index: int, ratio: List[float], pressure: List[float]
     ) -> List[float]:
         self.validate_region_index(region_index)
 
         return self._regions[region_index].viscosity(ratio, pressure)
+
+    def viscosity_unit(self) -> str:
+        raise NotImplementedError("This method cannot be called from the base class.")
 
     def get_region(self, region_index: int) -> PvxOBase:
         self.validate_region_index(region_index)

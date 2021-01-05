@@ -78,6 +78,9 @@ class PvtPlot(WebvizPluginABC):
 
         super().__init__()
 
+        mathjax = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.4/MathJax.js?config=TeX-MML-AM_CHTML"
+        app.scripts.append_script({"external_url": mathjax})
+
         self.ensemble_paths = {
             ensemble: app.webviz_settings["shared_settings"]["scratch_ensembles"][
                 ensemble
@@ -314,30 +317,6 @@ class PvtPlot(WebvizPluginABC):
                                 ),
                             ],
                         ),
-                        html.Label(
-                            id=self.uuid("unit_system_selector"),
-                            children=[
-                                html.Span(
-                                    "Unit system",
-                                    style={"font-weight": "bold"},
-                                ),
-                                dcc.Dropdown(
-                                    id=self.uuid("unit_system"),
-                                    clearable=False,
-                                    options=[
-                                        {
-                                            "label": f"{name.lower().capitalize()}",
-                                            "value": enum,
-                                        }
-                                        for enum, name in self.unit_systems.items()
-                                    ],
-                                    multi=False,
-                                    value=list(self.unit_systems.keys())[0],
-                                    persistence=True,
-                                    persistence_type="session",
-                                ),
-                            ],
-                        ),
                     ],
                 ),
                 html.Div(
@@ -393,7 +372,9 @@ class PvtPlot(WebvizPluginABC):
             elif color_by == "PVTNUM":
                 colors = self.pvtnum_colors
 
-            layout = plot_layout(phase, color_by, self.plotly_theme["layout"])
+            layout = plot_layout(
+                phase, color_by, self.plotly_theme["layout"], data_frame
+            )
 
             traces = add_realization_traces(data_frame, color_by, colors, phase)
 
@@ -729,7 +710,9 @@ def add_realization_traces(
 
 
 @CACHE.memoize(timeout=CACHE.TIMEOUT)
-def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
+def plot_layout(
+    phase: str, color_by: str, theme: dict, data_frame: pd.DataFrame
+) -> dict:
     """
     Constructing plot layout from scratch as it is more responsive than plotly subplots package.
     """
@@ -790,7 +773,10 @@ def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
                 "zeroline": False,
                 "anchor": "y2",
                 "domain": [0.0, 1.0],
-                "title": {"text": "Pressure [barsa]", "standoff": 15},
+                "title": {
+                    "text": fr"Pressure [{data_frame['PRESSURE_UNIT'].iloc[0]}]",
+                    "standoff": 15,
+                },
                 "showgrid": True,
             },
             "yaxis": {
@@ -800,9 +786,7 @@ def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
                 "anchor": "x",
                 "domain": [0.525, 1.0],
                 "title": {
-                    "text": "{} Formation Volume Factor [rm3/sm3]".format(
-                        phase.lower().capitalize()
-                    )
+                    "text": fr"{phase.lower().capitalize()} Formation Volume Factor [{data_frame['VOLUMEFACTOR_UNIT'].iloc[0]}]"
                 },
                 "type": "linear",
                 "showgrid": True,
@@ -814,7 +798,7 @@ def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
                 "anchor": "x2",
                 "domain": [0.0, 0.475],
                 "title": {
-                    "text": "{} Viscosity [cP]".format(phase.lower().capitalize())
+                    "text": fr"{phase.lower().capitalize()} Viscosity [{data_frame['VISCOSITY_UNIT'].iloc[0]}]"
                 },
                 "type": "linear",
                 "showgrid": True,

@@ -62,12 +62,19 @@ def filter_pvt_data_frame(
         "KEYWORD",
         "RATIO",
         "PRESSURE",
+        "PRESSURE_UNIT",
         "VOLUMEFACTOR",
+        "VOLUMEFACTOR_UNIT",
         "VISCOSITY",
+        "VISCOSITY_UNIT",
     ]
 
-    if not "RATIO" in data_frame.columns:
-        data_frame["RATIO"] = 1.0
+    if not "VOLUMEFACTOR_UNIT" in data_frame.columns:
+        data_frame["VOLUMEFACTOR_UNIT"] = r"$rm^3/{sm^3}$"
+    if not "PRESSURE_UNIT" in data_frame.columns:
+        data_frame["PRESSURE_UNIT"] = r"$bar$"
+    if not "VISCOSITY_UNIT" in data_frame.columns:
+        data_frame["VISCOSITY_UNIT"] = r"$cP$"
 
     data_frame = data_frame[columns]
 
@@ -175,8 +182,11 @@ def load_pvt_dataframe(
         column_pvtnum = []
         column_ratio = []
         column_volume_factor = []
+        column_volume_factor_unit = []
         column_pressure = []
+        column_pressure_unit = []
         column_viscosity = []
+        column_viscosity_unit = []
         column_keyword = []
 
         ratios: List[float] = []
@@ -214,10 +224,19 @@ def load_pvt_dataframe(
                     column_keyword.extend([keyword for _ in pressures])
                     column_ratio.extend(ratios)
                     column_pressure.extend(pressures)
+                    column_pressure_unit.extend(
+                        [oil.pressure_unit() for _ in pressures]
+                    )
                     column_volume_factor.extend(
                         region.formation_volume_factor(ratios, pressures)
                     )
+                    column_volume_factor_unit.extend(
+                        [oil.formation_volume_factor_unit() for _ in pressures]
+                    )
                     column_viscosity.extend(region.viscosity(ratios, pressures))
+                    column_viscosity_unit.extend(
+                        [oil.viscosity_unit() for _ in pressures]
+                    )
 
                 else:
                     (ratio, pressure) = (
@@ -228,10 +247,17 @@ def load_pvt_dataframe(
                     column_keyword.extend([keyword for _ in pressure])
                     column_ratio.extend(ratio)
                     column_pressure.extend(pressure)
+                    column_pressure_unit.extend([oil.pressure_unit() for _ in pressure])
                     column_volume_factor.extend(
                         region.formation_volume_factor(ratio, pressure)
                     )
+                    column_volume_factor_unit.extend(
+                        [oil.formation_volume_factor_unit() for _ in pressure]
+                    )
                     column_viscosity.extend(region.viscosity(ratio, pressure))
+                    column_viscosity_unit.extend(
+                        [oil.viscosity_unit() for _ in pressure]
+                    )
 
         if gas:
             if gas.is_wet_gas():
@@ -252,10 +278,15 @@ def load_pvt_dataframe(
                 column_keyword.extend([keyword for _ in pressure])
                 column_ratio.extend(ratio)
                 column_pressure.extend(pressure)
+                column_pressure_unit.extend([gas.pressure_unit() for _ in pressure])
                 column_volume_factor.extend(
                     region.formation_volume_factor(ratio, pressure)
                 )
+                column_volume_factor_unit.extend(
+                    [gas.formation_volume_factor_unit() for _ in pressure]
+                )
                 column_viscosity.extend(region.viscosity(ratio, pressure))
+                column_viscosity_unit.extend([gas.viscosity_unit() for _ in pressure])
 
         if water:
             for region_index, region in enumerate(water.regions()):
@@ -263,10 +294,17 @@ def load_pvt_dataframe(
                 column_keyword.extend(["PVTW" for _ in pressures])
                 column_ratio.extend(ratios)
                 column_pressure.extend(pressures)
+                column_pressure_unit.extend([water.pressure_unit() for _ in pressures])
                 column_volume_factor.extend(
                     region.formation_volume_factor(ratios, pressures)
                 )
+                column_volume_factor_unit.extend(
+                    [water.formation_volume_factor_unit() for _ in pressures]
+                )
                 column_viscosity.extend(region.viscosity(ratios, pressures))
+                column_viscosity_unit.extend(
+                    [water.viscosity_unit() for _ in pressures]
+                )
 
         data_frame = pd.DataFrame(
             {
@@ -274,8 +312,11 @@ def load_pvt_dataframe(
                 "KEYWORD": column_keyword,
                 "R": column_ratio,
                 "PRESSURE": column_pressure,
+                "PRESSURE_UNIT": column_pressure_unit,
                 "VOLUMEFACTOR": column_volume_factor,
+                "VOLUMEFACTOR_UNIT": column_volume_factor_unit,
                 "VISCOSITY": column_viscosity,
+                "VISCOSITY_UNIT": column_viscosity_unit,
             }
         )
 

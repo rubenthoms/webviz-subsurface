@@ -5,7 +5,7 @@
 ########################################
 
 from enum import IntEnum
-from typing import List, Callable, Union
+from typing import List, Callable, Union, Dict
 
 
 class ErtEclUnitEnum(IntEnum):
@@ -19,16 +19,15 @@ class ErtEclUnitEnum(IntEnum):
 def unit_system_name(unit_system: ErtEclUnitEnum) -> str:
     if unit_system == ErtEclUnitEnum.ECL_SI_UNITS:
         return "SI"
-    elif unit_system == ErtEclUnitEnum.ECL_METRIC_UNITS:
+    if unit_system == ErtEclUnitEnum.ECL_METRIC_UNITS:
         return "METRIC"
-    elif unit_system == ErtEclUnitEnum.ECL_FIELD_UNITS:
+    if unit_system == ErtEclUnitEnum.ECL_FIELD_UNITS:
         return "FIELD"
-    elif unit_system == ErtEclUnitEnum.ECL_LAB_UNITS:
+    if unit_system == ErtEclUnitEnum.ECL_LAB_UNITS:
         return "LAB"
-    elif unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
+    if unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
         return "PVT"
-    else:
-        return "UNKNOWN"
+    return "UNKNOWN"
 
 
 class UnitBase:
@@ -43,7 +42,7 @@ class Prefix:
             self.symbol = symbol
 
         def __mul__(self, other):  # type: ignore[no-untyped-def]
-            if issubclass(other, UnitBase):
+            if issubclass(other.__class__, UnitBase):
                 return other.__class__(
                     self.value * other.value, f"{self.symbol}{other.symbol}"
                 )
@@ -92,56 +91,101 @@ class Unit:
 
         def tidy_symbol(self) -> None:
             self.symbol = "".join(self.symbol.split())
-            numerator: List[str] = [
-                "",
-            ]
-            denominator: List[str] = [
-                "",
-            ]
+            numerator: Dict[str, int] = {}
+            denominator: Dict[str, int] = {}
 
             in_parantheses = False
             in_denominator = False
+            power = False
+            current_power = ""
+            current_symbol = ""
+            i = 0
 
             for char in self.symbol:
-                if char == "*":
-                    numerator.append("")
-                    if not in_parantheses:
-                        in_denominator = False
-                elif char == "/":
-                    denominator.append("")
-                    in_denominator = True
-                elif char == "(":
-                    in_parantheses = True
-                elif char == ")":
-                    in_parantheses = False
-                elif in_denominator:
-                    denominator[-1] += char
+                if char in ["*", "/", "(", ")"]:
+                    if current_symbol != "":
+                        if not in_denominator:
+                            if current_symbol not in numerator:
+                                numerator[current_symbol] = 0
+                            numerator[current_symbol] += int(
+                                current_power if current_power != "" else 1
+                            )
+                        else:
+                            if current_symbol not in denominator:
+                                denominator[current_symbol] = 0
+                            denominator[current_symbol] += int(
+                                current_power if current_power != "" else 1
+                            )
+
+                if char in ["*", "/", "(", ")"]:
+                    if char == "*":
+                        if not in_parantheses:
+                            in_denominator = False
+                    elif char == "/":
+                        in_denominator = True
+                    elif char == "(":
+                        in_parantheses = True
+                    elif char == ")":
+                        in_parantheses = False
+
+                    current_symbol = ""
+                    current_power = ""
+                    power = False
+                elif char == "^":
+                    power = True
                 else:
-                    numerator[-1] += char
+                    if power:
+                        current_power += char
+                    else:
+                        current_symbol += char
+
+                if i == len(self.symbol) - 1:
+                    if current_symbol != "":
+                        if not in_denominator:
+                            if current_symbol not in numerator:
+                                numerator[current_symbol] = 0
+                            numerator[current_symbol] += int(
+                                current_power if current_power != "" else 1
+                            )
+                        else:
+                            if current_symbol not in denominator:
+                                denominator[current_symbol] = 0
+                            denominator[current_symbol] += int(
+                                current_power if current_power != "" else 1
+                            )
+                i += 1
 
             self.symbol = ""
 
-            for num in numerator:
-                check = False
-                for denom in denominator:
+            for num, num_power in numerator.items():
+                for denom, denom_power in denominator.items():
                     if num == denom:
-                        check = True
-                        denominator.remove(denom)
+                        denominator[num] = max(0, denom_power - num_power)
+                        numerator[num] = max(0, num_power - denom_power)
                         break
 
-                if not check:
+            for num, num_power in numerator.items():
+                if num_power > 0:
                     if self.symbol == "":
                         self.symbol += num
                     else:
                         self.symbol += f"*{num}"
+                    if num_power > 1:
+                        self.symbol += f"^{num_power}"
 
-            self.symbol += "/("
+            if len(denominator) > 0:
+                self.symbol += "/("
 
-            for denom in denominator:
-                if self.symbol[-1] == "(":
-                    self.symbol += denom
-                else:
-                    self.symbol += f"*{num}"
+                for denom, denom_power in denominator.items():
+                    if denom_power > 0:
+                        if self.symbol[-1] == "(":
+                            self.symbol += denom
+                        else:
+                            self.symbol += f"*{denom}"
+                        if denom_power > 1:
+                            self.symbol += f"^{denom_power}"
+
+                self.symbol += ")"
 
         def __mul__(self, other):  # type: ignore[no-untyped-def]
             if type(other) is type(self):
@@ -234,6 +278,8 @@ class Unit:
     psia = Base(lbf / square.__func__(inch), "psi")  # type: ignore[attr-defined]
 
     # Temperature
+    deg_kelvin = Base(1.0, "K")
+
     deg_celsius = Base(1.0, "\u2103")
     deg_celsius_offset = 273.15
 
@@ -265,6 +311,29 @@ class Unit:
 
 
 class UnitSystems:
+    class SI:
+        Pressure = Unit.Pascal
+        Temperature = Unit.deg_kelvin
+        TemperatureOffset = 0.0
+        AbsoluteTemperature = Unit.deg_kelvin
+        Length = Unit.meter
+        Time = Unit.second
+        Mass = Unit.kilogram
+        Permeability = Unit.square(Unit.meter)
+        Transmissibility = Unit.cubic(Unit.meter)
+        LiquidSurfaceVolume = Unit.cubic(Unit.meter)
+        GasSurfaceVolume = Unit.cubic(Unit.meter)
+        ReservoirVolume = Unit.cubic(Unit.meter)
+        GasDissolutionFactor = GasSurfaceVolume / LiquidSurfaceVolume
+        OilDissolutionFactor = LiquidSurfaceVolume / GasSurfaceVolume
+        Density = Unit.kilogram / Unit.cubic(Unit.meter)
+        PolymerDensity = Unit.kilogram / Unit.cubic(Unit.meter)
+        Salinity = Unit.kilogram / Unit.cubic(Unit.meter)
+        Viscosity = Unit.Pascal * Unit.second
+        Timestep = Unit.second
+        SurfaceTension = Unit.Newton / Unit.meter
+        Energy = Unit.joule
+
     class Metric:
         Pressure = Unit.barsa
         Temperature = Unit.deg_celsius
@@ -375,227 +444,269 @@ class UnitSystemUnits:
 class EclUnits:
     class UnitSystem:
         @staticmethod
-        def density() -> float:
+        def density() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def depth() -> float:
+        def depth() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def pressure() -> float:
+        def pressure() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def reservoir_rate() -> float:
+        def reservoir_rate() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def reservoir_volume() -> float:
+        def reservoir_volume() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def surface_volume_gas() -> float:
+        def surface_volume_gas() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def surface_volume_liquid() -> float:
+        def surface_volume_liquid() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def time() -> float:
+        def time() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def transmissibility() -> float:
+        def transmissibility() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
         @staticmethod
-        def viscosity() -> float:
+        def viscosity() -> Unit.Base:
             raise NotImplementedError("The base class cannot be called directly.")
 
-        def dissolved_gas_oil_ratio(self) -> float:
+        def dissolved_gas_oil_ratio(self) -> Unit.Base:
             return self.surface_volume_gas() / self.surface_volume_liquid()
 
-        def vaporised_oil_gas_ratio(self) -> float:
+        def vaporised_oil_gas_ratio(self) -> Unit.Base:
             return self.surface_volume_liquid() / self.surface_volume_gas()
+
+    class EclSIUnitSystem(UnitSystem):
+        @staticmethod
+        def density() -> Unit.Base:
+            return UnitSystems.SI.Density
+
+        @staticmethod
+        def depth() -> Unit.Base:
+            return UnitSystems.SI.Length
+
+        @staticmethod
+        def pressure() -> Unit.Base:
+            return UnitSystems.SI.Pressure
+
+        @staticmethod
+        def reservoir_rate() -> Unit.Base:
+            return UnitSystems.SI.ReservoirVolume / UnitSystems.SI.Time
+
+        @staticmethod
+        def reservoir_volume() -> Unit.Base:
+            return UnitSystems.SI.ReservoirVolume
+
+        @staticmethod
+        def surface_volume_gas() -> Unit.Base:
+            return UnitSystems.SI.GasSurfaceVolume
+
+        @staticmethod
+        def surface_volume_liquid() -> Unit.Base:
+            return UnitSystems.SI.LiquidSurfaceVolume
+
+        @staticmethod
+        def time() -> Unit.Base:
+            return UnitSystems.SI.Time
+
+        @staticmethod
+        def transmissibility() -> Unit.Base:
+            return UnitSystems.SI.Transmissibility
+
+        @staticmethod
+        def viscosity() -> Unit.Base:
+            return UnitSystems.SI.Viscosity
 
     class EclMetricUnitSystem(UnitSystem):
         @staticmethod
-        def density() -> float:
+        def density() -> Unit.Base:
             return UnitSystems.Metric.Density
 
         @staticmethod
-        def depth() -> float:
+        def depth() -> Unit.Base:
             return UnitSystems.Metric.Length
 
         @staticmethod
-        def pressure() -> float:
+        def pressure() -> Unit.Base:
             return UnitSystems.Metric.Pressure
 
         @staticmethod
-        def reservoir_rate() -> float:
+        def reservoir_rate() -> Unit.Base:
             return UnitSystems.Metric.ReservoirVolume / UnitSystems.Metric.Time
 
         @staticmethod
-        def reservoir_volume() -> float:
+        def reservoir_volume() -> Unit.Base:
             return UnitSystems.Metric.ReservoirVolume
 
         @staticmethod
-        def surface_volume_gas() -> float:
+        def surface_volume_gas() -> Unit.Base:
             return UnitSystems.Metric.GasSurfaceVolume
 
         @staticmethod
-        def surface_volume_liquid() -> float:
+        def surface_volume_liquid() -> Unit.Base:
             return UnitSystems.Metric.LiquidSurfaceVolume
 
         @staticmethod
-        def time() -> float:
+        def time() -> Unit.Base:
             return UnitSystems.Metric.Time
 
         @staticmethod
-        def transmissibility() -> float:
+        def transmissibility() -> Unit.Base:
             return UnitSystems.Metric.Transmissibility
 
         @staticmethod
-        def viscosity() -> float:
+        def viscosity() -> Unit.Base:
             return UnitSystems.Metric.Viscosity
 
     class EclFieldUnitSystem(UnitSystem):
         @staticmethod
-        def density() -> float:
+        def density() -> Unit.Base:
             return UnitSystems.Field.Density
 
         @staticmethod
-        def depth() -> float:
+        def depth() -> Unit.Base:
             return UnitSystems.Field.Length
 
         @staticmethod
-        def pressure() -> float:
+        def pressure() -> Unit.Base:
             return UnitSystems.Field.Pressure
 
         @staticmethod
-        def reservoir_rate() -> float:
+        def reservoir_rate() -> Unit.Base:
             return UnitSystems.Field.ReservoirVolume / UnitSystems.Field.Time
 
         @staticmethod
-        def reservoir_volume() -> float:
+        def reservoir_volume() -> Unit.Base:
             return UnitSystems.Field.ReservoirVolume
 
         @staticmethod
-        def surface_volume_gas() -> float:
+        def surface_volume_gas() -> Unit.Base:
             return UnitSystems.Field.GasSurfaceVolume
 
         @staticmethod
-        def surface_volume_liquid() -> float:
+        def surface_volume_liquid() -> Unit.Base:
             return UnitSystems.Field.LiquidSurfaceVolume
 
         @staticmethod
-        def time() -> float:
+        def time() -> Unit.Base:
             return UnitSystems.Field.Time
 
         @staticmethod
-        def transmissibility() -> float:
+        def transmissibility() -> Unit.Base:
             return UnitSystems.Field.Transmissibility
 
         @staticmethod
-        def viscosity() -> float:
+        def viscosity() -> Unit.Base:
             return UnitSystems.Field.Viscosity
 
     class EclLabUnitSystem(UnitSystem):
         @staticmethod
-        def density() -> float:
+        def density() -> Unit.Base:
             return UnitSystems.Lab.Density
 
         @staticmethod
-        def depth() -> float:
+        def depth() -> Unit.Base:
             return UnitSystems.Lab.Length
 
         @staticmethod
-        def pressure() -> float:
+        def pressure() -> Unit.Base:
             return UnitSystems.Lab.Pressure
 
         @staticmethod
-        def reservoir_rate() -> float:
+        def reservoir_rate() -> Unit.Base:
             return UnitSystems.Lab.ReservoirVolume / UnitSystems.Lab.Time
 
         @staticmethod
-        def reservoir_volume() -> float:
+        def reservoir_volume() -> Unit.Base:
             return UnitSystems.Lab.ReservoirVolume
 
         @staticmethod
-        def surface_volume_gas() -> float:
+        def surface_volume_gas() -> Unit.Base:
             return UnitSystems.Lab.GasSurfaceVolume
 
         @staticmethod
-        def surface_volume_liquid() -> float:
+        def surface_volume_liquid() -> Unit.Base:
             return UnitSystems.Lab.LiquidSurfaceVolume
 
         @staticmethod
-        def time() -> float:
+        def time() -> Unit.Base:
             return UnitSystems.Lab.Time
 
         @staticmethod
-        def transmissibility() -> float:
+        def transmissibility() -> Unit.Base:
             return UnitSystems.Lab.Transmissibility
 
         @staticmethod
-        def viscosity() -> float:
+        def viscosity() -> Unit.Base:
             return UnitSystems.Lab.Viscosity
 
     class EclPvtMUnitSystem(UnitSystem):
         @staticmethod
-        def density() -> float:
+        def density() -> Unit.Base:
             return UnitSystems.PVTM.Density
 
         @staticmethod
-        def depth() -> float:
+        def depth() -> Unit.Base:
             return UnitSystems.PVTM.Length
 
         @staticmethod
-        def pressure() -> float:
+        def pressure() -> Unit.Base:
             return UnitSystems.PVTM.Pressure
 
         @staticmethod
-        def reservoir_rate() -> float:
+        def reservoir_rate() -> Unit.Base:
             return UnitSystems.PVTM.ReservoirVolume / UnitSystems.PVTM.Time
 
         @staticmethod
-        def reservoir_volume() -> float:
+        def reservoir_volume() -> Unit.Base:
             return UnitSystems.PVTM.ReservoirVolume
 
         @staticmethod
-        def surface_volume_gas() -> float:
+        def surface_volume_gas() -> Unit.Base:
             return UnitSystems.PVTM.GasSurfaceVolume
 
         @staticmethod
-        def surface_volume_liquid() -> float:
+        def surface_volume_liquid() -> Unit.Base:
             return UnitSystems.PVTM.LiquidSurfaceVolume
 
         @staticmethod
-        def time() -> float:
+        def time() -> Unit.Base:
             return UnitSystems.PVTM.Time
 
         @staticmethod
-        def transmissibility() -> float:
+        def transmissibility() -> Unit.Base:
             return UnitSystems.PVTM.Transmissibility
 
         @staticmethod
-        def viscosity() -> float:
+        def viscosity() -> Unit.Base:
             return UnitSystems.PVTM.Viscosity
 
     @staticmethod
     def create_unit_system(unit_system: int) -> UnitSystem:
+        if unit_system == ErtEclUnitEnum.ECL_SI_UNITS:
+            return EclUnits.EclSIUnitSystem()
         if unit_system == ErtEclUnitEnum.ECL_METRIC_UNITS:
             return EclUnits.EclMetricUnitSystem()
-        elif unit_system == ErtEclUnitEnum.ECL_FIELD_UNITS:
+        if unit_system == ErtEclUnitEnum.ECL_FIELD_UNITS:
             return EclUnits.EclFieldUnitSystem()
-        elif unit_system == ErtEclUnitEnum.ECL_LAB_UNITS:
+        if unit_system == ErtEclUnitEnum.ECL_LAB_UNITS:
             return EclUnits.EclLabUnitSystem()
-        elif unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
+        if unit_system == ErtEclUnitEnum.ECL_PVT_M_UNITS:
             return EclUnits.EclPvtMUnitSystem()
-        else:
-            raise ValueError(f"Unsupported Unit Convention: {unit_system}")
+        raise ValueError(f"Unsupported Unit Convention: {unit_system}")
 
 
 class ConvertUnits:
@@ -638,47 +749,72 @@ class CreateUnitConverter:
     def create_converter_to_SI(
         uscale: float,
     ) -> Callable[[float,], float]:
+        """Converts quantity from its measurement units to SI units.
+
+        Example:
+        quantity = 100 bar
+        [quantity](METRIC) = bar
+        [quantity](SI) = Pa
+        uscale = METRIC.pressure() = 100 000 Pa/bar
+        returns 100 bar * 100 000 Pa/bar = 10 000 000 Pa
+        """
         return lambda quantity: Unit.Convert.from_(quantity, uscale)
 
     @staticmethod
     def rs_scale(unit_system: EclUnits.UnitSystem) -> float:
         # Rs = [sVolume(Gas) / sVolume(Liquid)]
-        return unit_system.surface_volume_gas() / unit_system.surface_volume_liquid()
+        return (
+            unit_system.surface_volume_gas().value
+            / unit_system.surface_volume_liquid().value
+        )
 
     @staticmethod
     def rv_scale(unit_system: EclUnits.UnitSystem) -> float:
         # Rv = [sVolume(Liq) / sVolume(Gas)]
-        return unit_system.surface_volume_liquid() / unit_system.surface_volume_gas()
+        return (
+            unit_system.surface_volume_liquid().value
+            / unit_system.surface_volume_gas().value
+        )
 
     @staticmethod
     def fvf_scale(unit_system: EclUnits.UnitSystem) -> float:
         # B = [rVolume / sVolume(Liquid)]
-        return unit_system.reservoir_volume() / unit_system.surface_volume_liquid()
+        return (
+            unit_system.reservoir_volume().value
+            / unit_system.surface_volume_liquid().value
+        )
 
     @staticmethod
     def fvf_gas_scale(unit_system: EclUnits.UnitSystem) -> float:
         # B = [rVolume / sVolume(Gas)]
-        return unit_system.reservoir_volume() / unit_system.surface_volume_gas()
+        return (
+            unit_system.reservoir_volume().value
+            / unit_system.surface_volume_gas().value
+        )
 
     class ToSI:
         @staticmethod
         def density(
             unit_system: EclUnits.UnitSystem,
         ) -> Callable[[float,], float]:
-            return CreateUnitConverter.create_converter_to_SI(unit_system.density())
+            return CreateUnitConverter.create_converter_to_SI(
+                unit_system.density().value
+            )
 
         @staticmethod
         def pressure(
             unit_system: EclUnits.UnitSystem,
         ) -> Callable[[float,], float]:
-            return CreateUnitConverter.create_converter_to_SI(unit_system.pressure())
+            return CreateUnitConverter.create_converter_to_SI(
+                unit_system.pressure().value
+            )
 
         @staticmethod
         def compressibility(
             unit_system: EclUnits.UnitSystem,
         ) -> Callable[[float,], float]:
             return CreateUnitConverter.create_converter_to_SI(
-                1.0 / unit_system.pressure()
+                1.0 / unit_system.pressure().value
             )
 
         @staticmethod
@@ -711,7 +847,7 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             # d(1/B)/dp
             b_scale = CreateUnitConverter.fvf_scale(unit_system)
-            p_scale = unit_system.pressure()
+            p_scale = unit_system.pressure().value
 
             return CreateUnitConverter.create_converter_to_SI(1.0 / (b_scale * p_scale))
 
@@ -732,7 +868,7 @@ class CreateUnitConverter:
             unit_system: EclUnits.UnitSystem,
         ) -> Callable[[float,], float]:
             b_scale = CreateUnitConverter.fvf_scale(unit_system)
-            visc_scale = unit_system.viscosity()
+            visc_scale = unit_system.viscosity().value
 
             return CreateUnitConverter.create_converter_to_SI(
                 1.0 / (b_scale * visc_scale)
@@ -744,8 +880,8 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             # d(1/(B*mu))/dp
             b_scale = CreateUnitConverter.fvf_scale(unit_system)
-            p_scale = unit_system.pressure()
-            visc_scale = unit_system.viscosity()
+            p_scale = unit_system.pressure().value
+            visc_scale = unit_system.viscosity().value
 
             return CreateUnitConverter.create_converter_to_SI(
                 1.0 / (b_scale * visc_scale * p_scale)
@@ -757,7 +893,7 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             # d(1/(B*mu))/dRv
             b_scale = CreateUnitConverter.fvf_scale(unit_system)
-            visc_scale = unit_system.viscosity()
+            visc_scale = unit_system.viscosity().value
             rv_scale = CreateUnitConverter.rv_scale(unit_system)
 
             return CreateUnitConverter.create_converter_to_SI(
@@ -778,7 +914,7 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             # d(1/B)/dp
             b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
-            p_scale = unit_system.pressure()
+            p_scale = unit_system.pressure().value
 
             return CreateUnitConverter.create_converter_to_SI(1.0 / (b_scale * p_scale))
 
@@ -799,7 +935,7 @@ class CreateUnitConverter:
             unit_system: EclUnits.UnitSystem,
         ) -> Callable[[float,], float]:
             b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
-            visc_scale = unit_system.viscosity()
+            visc_scale = unit_system.viscosity().value
 
             return CreateUnitConverter.create_converter_to_SI(
                 1.0 / (b_scale * visc_scale)
@@ -811,8 +947,8 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             # d(1/(B*mu))/dp
             b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
-            p_scale = unit_system.pressure()
-            visc_scale = unit_system.viscosity()
+            p_scale = unit_system.pressure().value
+            visc_scale = unit_system.viscosity().value
 
             return CreateUnitConverter.create_converter_to_SI(
                 1.0 / (b_scale * visc_scale * p_scale)
@@ -824,7 +960,7 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             # d(1/(B*mu))/dRv
             b_scale = CreateUnitConverter.fvf_gas_scale(unit_system)
-            visc_scale = unit_system.viscosity()
+            visc_scale = unit_system.viscosity().value
             rv_scale = CreateUnitConverter.rv_scale(unit_system)
 
             return CreateUnitConverter.create_converter_to_SI(

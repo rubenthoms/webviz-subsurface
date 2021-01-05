@@ -171,11 +171,32 @@ class Oil(Implementation):
         self.original_unit_system = ErtEclUnitEnum(unit_system)
         self.create_pvt_function(raw, is_const_compr, unit_system)
 
+    def formation_volume_factor_unit(self) -> str:
+        unit_system = EclUnits.create_unit_system(
+            self.original_unit_system
+            if self.keep_unit_system
+            else ErtEclUnitEnum.ECL_SI_UNITS
+        )
+
+        return fr"${{r{unit_system.reservoir_volume().symbol}}}/{{s{unit_system.surface_volume_liquid().symbol}}}$"
+
+    def viscosity_unit(self) -> str:
+        unit_system = EclUnits.create_unit_system(
+            self.original_unit_system
+            if self.keep_unit_system
+            else ErtEclUnitEnum.ECL_SI_UNITS
+        )
+
+        return fr"${unit_system.viscosity().symbol}$"
+
     @staticmethod
     def _formation_volume_factor(
         unit_system: EclUnits.UnitSystem,
     ) -> Callable[[float,], float]:
-        scale = unit_system.reservoir_volume() / unit_system.surface_volume_liquid()
+        scale = (
+            unit_system.reservoir_volume().value
+            / unit_system.surface_volume_liquid().value
+        )
 
         return lambda x: Unit.Convert.from_(x, scale)
 
@@ -183,7 +204,7 @@ class Oil(Implementation):
     def _viscosity(
         unit_system: EclUnits.UnitSystem,
     ) -> Callable[[float,], float]:
-        scale = unit_system.viscosity()
+        scale = unit_system.viscosity().value
 
         return lambda x: Unit.Convert.from_(x, scale)
 
