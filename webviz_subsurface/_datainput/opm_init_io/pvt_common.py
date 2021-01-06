@@ -30,30 +30,47 @@ class EclPropertyTableRawData:  # pylint: disable=too-few-public-methods
 
 
 class PvxOBase:
-    """
-    A base class for all fluids.
+    """A common base class for all fluids.
+
+    Should be inherited by any new fluid in order to have
+    a common interface.
     """
 
     def __init__(self) -> None:
-        pass
+        """Base implementation, raises a NotImplementedError."""
+        raise NotImplementedError("You must not create objects of this base class.")
 
     def get_keys(self) -> List[float]:
+        """Base implementation, raises a NotImplementedError."""
         raise NotImplementedError("You must not call any methods of this base class.")
 
     def get_independents(self) -> List[float]:
+        """Base implementation, raises a NotImplementedError."""
         raise NotImplementedError("You must not call any methods of this base class.")
 
     # pylint: disable=R0201
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Base implementation, raises a NotImplementedError."""
         raise NotImplementedError("You must not call any methods of this base class.")
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        """Base implementation, raises a NotImplementedError."""
         raise NotImplementedError("You must not call any methods of this base class.")
 
 
 def extrap1d(interpolator: interpolate.interp1d) -> Callable[[float], np.ndarray]:
+    """Extends the given scipy interpolator by the ability to extrapolate linearly
+    in case the given independent is out of range.
+
+    Args:
+        interpolator: A scipy interp1d object to be extended by linear extrapolation.
+
+    Returns:
+        A callable taking an x value and returns the related interpolated or
+        linearly extrapolated y value.
+    """
     x_s = interpolator.x
     y_s = interpolator.y
 
@@ -72,12 +89,34 @@ def extrap1d(interpolator: interpolate.interp1d) -> Callable[[float], np.ndarray
 
 
 class PVDx:
+    """A base class for dead and dry gas/oil respectively.
+
+    Attributes:
+        x: A numpy array holding the independent values.
+        y: A two-dimensional numpy array holding the dependent values.
+        interpolation: A scipy interp1d object for interpolating the dependent values.
+        inter_extrapolation: An extrap1d object for inter- and extrapolating the dependent values.
+    """
+
     def __init__(
         self,
         index_table: int,
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
     ) -> None:
+        """Extracts all values of the table with the given index from raw, converts them according to the
+        given convert object and stores them as numpy arrays, x and y respectively.
+
+        Creates an interpolation and an extrapolation object utilising scipy's interp1d and based on it the
+        custom tailored extrap1d.
+
+        Raises a ValueError if there is no interpolation interval given, that is when there are fewer than two independents.
+
+        Arguments:
+            index_table: The index of the table which values are supposed to be extracted.
+            raw: An EclPropertyTableRawData object that was initialised based on an Eclipse INIT file.
+            convert: A ConvertUnit object that contains callables for converting units.
+        """
         self.x: np.ndarray
         self.y: np.ndarray = np.zeros((0, 0))
 
@@ -123,24 +162,36 @@ class PVDx:
         self.inter_extrapolation = extrap1d(self.interpolation)
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary keys.
+
+        Since this is dry/dead gas/oil, there is no dependency on Rv/Rs.
+        Hence, this method returns a list holding only a single float of value 0.0.
+        """
         return [
             0.0,
         ]
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all independents.
+
+        In case of gas/oil this returns a list of pressure values.
+        """
         return self.x
 
     @staticmethod
     def entry_valid(x: float) -> bool:
-        # Equivalent to ECLPiecewiseLinearInterpolant.hpp line 293
-        # or ECLPvtOil.cpp line 458
+        """Returns True if the given value is valid, i.e. >= 1.0e20, else False."""
         return abs(x) < 1.0e20
 
     def formation_volume_factor(self, pressure: List[float]) -> List[float]:
+        """Returns a list of formation volume factor values corresponding
+        to the given list of pressure values.
+        """
         # 1 / (1 / B)
         return self.compute_quantity(pressure, lambda p: 1.0 / self.fvf_recip(p))
 
     def viscosity(self, pressure: List[float]) -> List[float]:
+        """Returns a list of viscosity values corresponding to the given list of pressure values."""
         # (1 / B) / (1 / (B * mu)
         return self.compute_quantity(
             pressure, lambda p: self.fvf_recip(p) / self.fvf_mu_recip(p)
@@ -150,6 +201,9 @@ class PVDx:
     def compute_quantity(
         pressures: List[float], evaluate: Callable[[Any], Any]
     ) -> List[float]:
+        """Calls the given evaluate function with each of the values
+        in the given pressure list and returns a list of results.
+        """
         result: List[float] = []
 
         for pressure in pressures:
@@ -414,14 +468,16 @@ class Implementation:
         else:
             return None
 
-    def pressure_unit(self) -> str:
+    def pressure_unit(self, latex: bool = False) -> str:
         unit_system = EclUnits.create_unit_system(
             self.original_unit_system
             if self.keep_unit_system
             else ErtEclUnitEnum.ECL_SI_UNITS
         )
 
-        return fr"${unit_system.pressure().symbol}$"
+        if latex:
+            return fr"${unit_system.pressure().symbol}$"
+        return f"{unit_system.pressure().symbol}"
 
     def formation_volume_factor(
         self, region_index: int, ratio: List[float], pressure: List[float]
@@ -430,7 +486,7 @@ class Implementation:
 
         return self._regions[region_index].formation_volume_factor(ratio, pressure)
 
-    def formation_volume_factor_unit(self) -> str:
+    def formation_volume_factor_unit(self, latex: bool = False) -> str:
         raise NotImplementedError("This method cannot be called from the base class.")
 
     def viscosity(
@@ -440,7 +496,7 @@ class Implementation:
 
         return self._regions[region_index].viscosity(ratio, pressure)
 
-    def viscosity_unit(self) -> str:
+    def viscosity_unit(self, latex: bool = False) -> str:
         raise NotImplementedError("This method cannot be called from the base class.")
 
     def get_region(self, region_index: int) -> PvxOBase:

@@ -9,6 +9,8 @@ from typing import List, Callable, Union, Dict
 
 
 class ErtEclUnitEnum(IntEnum):
+    """ An enum for the different unit systems """
+
     ECL_SI_UNITS = 0
     ECL_METRIC_UNITS = 1
     ECL_FIELD_UNITS = 2
