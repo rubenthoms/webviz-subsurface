@@ -41,22 +41,44 @@ class PvxOBase:
         raise NotImplementedError("You must not create objects of this base class.")
 
     def get_keys(self) -> List[float]:
-        """Base implementation, raises a NotImplementedError."""
+        """Returns a list of all primary keys.
+
+        Base implementation, raises a NotImplementedError.
+        """
         raise NotImplementedError("You must not call any methods of this base class.")
 
     def get_independents(self) -> List[float]:
-        """Base implementation, raises a NotImplementedError."""
+        """Returns a list of all independents.
+
+        Base implementation, raises a NotImplementedError.
+        """
         raise NotImplementedError("You must not call any methods of this base class.")
 
     # pylint: disable=R0201
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
-        """Base implementation, raises a NotImplementedError."""
+        """Args:
+            ratio: List of ratio (key) values the volume factor values are requested for.
+            pressure: List of pressure values the volume factor values are requested for.
+
+        Returns:
+            A list of all volume factor values for the given ratio and pressure values.
+
+        Base implementation, raises a NotImplementedError.
+        """
         raise NotImplementedError("You must not call any methods of this base class.")
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
-        """Base implementation, raises a NotImplementedError."""
+        """Args:
+            ratio: List of ratio (key) values the viscosity values are requested for.
+            pressure: List of pressure values the viscosity values are requested for.
+
+        Returns:
+            A list of all viscosity values for the given ratio and pressure values.
+
+        Base implementation, raises a NotImplementedError.
+        """
         raise NotImplementedError("You must not call any methods of this base class.")
 
 
@@ -88,7 +110,38 @@ def extrap1d(interpolator: interpolate.interp1d) -> Callable[[float], np.ndarray
     return ufunclike
 
 
-class PVDx:
+class PVxx:
+    """A base class for PVDx and PVTx"""
+
+    def __init__(self) -> None:
+        """Base implementation, raises a NotImplementedError."""
+        raise NotImplementedError("You must not create objects of this base class.")
+
+    def get_keys(self) -> List[float]:
+        """Returns:
+            A list of all primary keys.
+
+        Base implementation, raises a NotImplementedError.
+        """
+        raise NotImplementedError("You must not call any methods of this base class.")
+
+    def get_independents(self) -> List[float]:
+        """Returns:
+            A list of all independents.
+
+        Base implementation, raises a NotImplementedError.
+        """
+        raise NotImplementedError("You must not call any methods of this base class.")
+
+    @staticmethod
+    def entry_valid(x: float) -> bool:
+        """Returns:
+        True if the given value is valid, i.e. >= 1.0e20, else False.
+        """
+        return abs(x) < 1.0e20
+
+
+class PVDx(PVxx):
     """A base class for dead and dry gas/oil respectively.
 
     Attributes:
@@ -104,18 +157,23 @@ class PVDx:
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
     ) -> None:
-        """Extracts all values of the table with the given index from raw, converts them according to the
-        given convert object and stores them as numpy arrays, x and y respectively.
+        # pylint: disable=super-init-not-called
+        """Extracts all values of the table with the given index from raw, converts them according
+        to the given convert object and stores them as numpy arrays, x and y respectively.
 
-        Creates an interpolation and an extrapolation object utilising scipy's interp1d and based on it the
-        custom tailored extrap1d.
+        Creates an interpolation and an extrapolation object utilising scipy's interp1d and based on
+        it the custom tailored extrap1d.
 
-        Raises a ValueError if there is no interpolation interval given, that is when there are fewer than two independents.
+        Raises a ValueError if there is no interpolation interval given, that is when there are
+        fewer than two independents.
 
-        Arguments:
+        Args:
             index_table: The index of the table which values are supposed to be extracted.
-            raw: An EclPropertyTableRawData object that was initialised based on an Eclipse INIT file.
+            raw:
+                An EclPropertyTableRawData object that was initialised based on an Eclipse
+                INIT file.
             convert: A ConvertUnit object that contains callables for converting units.
+
         """
         self.x: np.ndarray
         self.y: np.ndarray = np.zeros((0, 0))
@@ -165,33 +223,45 @@ class PVDx:
         """Returns a list of all primary keys.
 
         Since this is dry/dead gas/oil, there is no dependency on Rv/Rs.
-        Hence, this method returns a list holding only a single float of value 0.0.
+        Hence, this method returns a list holding floats of value 0.0
+        for each independent value.
+
         """
-        return [
-            0.0,
-        ]
+        return [0.0 for _ in self.x]
 
     def get_independents(self) -> List[float]:
         """Returns a list of all independents.
 
         In case of gas/oil this returns a list of pressure values.
+
         """
         return self.x
 
-    @staticmethod
-    def entry_valid(x: float) -> bool:
-        """Returns True if the given value is valid, i.e. >= 1.0e20, else False."""
-        return abs(x) < 1.0e20
-
     def formation_volume_factor(self, pressure: List[float]) -> List[float]:
-        """Returns a list of formation volume factor values corresponding
-        to the given list of pressure values.
+        """Args:
+            pressure: List of pressure values the volume factors are requested for.
+
+        Returns:
+            A list of formation volume factor values corresponding
+            to the given list of pressure values.
+
+        Base implementation, raises a NotImplementedError.
+
         """
         # 1 / (1 / B)
         return self.compute_quantity(pressure, lambda p: 1.0 / self.fvf_recip(p))
 
     def viscosity(self, pressure: List[float]) -> List[float]:
-        """Returns a list of viscosity values corresponding to the given list of pressure values."""
+        """Args:
+            pressure: List of pressure values the viscosity values are requested for.
+
+        Returns:
+            A list of viscosity values corresponding
+            to the given list of pressure values.
+
+        Base implementation, raises a NotImplementedError.
+
+        """
         # (1 / B) / (1 / (B * mu)
         return self.compute_quantity(
             pressure, lambda p: self.fvf_recip(p) / self.fvf_mu_recip(p)
@@ -203,6 +273,14 @@ class PVDx:
     ) -> List[float]:
         """Calls the given evaluate function with each of the values
         in the given pressure list and returns a list of results.
+
+        Args:
+            pressures: List of pressure values
+            evaluate: Evaluation function
+
+        Returns:
+            List of values resulting from evaluating the pressure values.
+
         """
         result: List[float] = []
 
@@ -212,13 +290,39 @@ class PVDx:
         return result
 
     def fvf_recip(self, point: float) -> float:
+        """Computes (possibly inter-/extrapolates) the reciproke of
+        the formation volume factor for the given point.
+
+        Args:
+            point:
+                The pressure point the formation volume factor
+                is requested for.
+
+        Returns:
+            The requested reciproke formation volume factor.
+
+        """
         return float(self.inter_extrapolation(point)[0])
 
     def fvf_mu_recip(self, point: float) -> float:
+        """Computes (possibly inter-/extrapolates) the reciproke of
+        the product of the formation volume factor and viscosity
+        for the given point.
+
+        Args:
+            point:
+                The pressure point the formation volume factor
+                is requested for.
+
+        Returns:
+            The requested reciproke product of the formation volume factor
+            and the viscosity.
+
+        """
         return float(self.inter_extrapolation(point)[1])
 
 
-class PVTx:
+class PVTx(PVxx):
     def __init__(
         self,
         index_table: int,
@@ -233,6 +337,22 @@ class PVTx:
             ConvertUnits,
         ],
     ) -> None:
+        # pylint: disable=super-init-not-called
+        """Extracts all values of the table with the given index from raw, converts them according
+        to the given convert object and stores them as numpy arrays, keys, x and y respectively.
+
+        Creates an interpolation and an extrapolation object utilising scipy's interp2d.
+
+        Args:
+            index_table: The index of the table which values are supposed to be extracted.
+            raw:
+                An EclPropertyTableRawData object that was initialised based on an Eclipse
+                INIT file.
+            convert:
+                A tuple consisting of a callable for converting the primary keys and a
+                ConvertUnit object that contains callables for converting units.
+
+        """
         self.keys: np.ndarray = np.zeros(0)
         self.x: np.ndarray = np.zeros(0)
         self.y: List[np.ndarray] = [np.zeros(0) for _ in range(1, raw.num_cols)]
@@ -283,18 +403,25 @@ class PVTx:
             )
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary keys."""
         return self.keys
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all independents."""
         return self.x
 
-    @staticmethod
-    def entry_valid(x: float) -> bool:
-        # Equivalent to ECLPiecewiseLinearInterpolant.hpp line 293
-        # or ECLPvtOil.cpp line 458
-        return abs(x) < 1.0e20
-
     def formation_volume_factor(self, key: List[float], x: List[float]) -> List[float]:
+        """Args:
+            key: List of primary key values the volume factors are requested for.
+            x: List of independents the volume factors are requested for.
+
+        Returns:
+            A list of formation volume factor values corresponding
+            to the given lists of primary key and independent values.
+
+        Base implementation, raises a NotImplementedError.
+
+        """
         return self.compute_quantity(
             key,
             x,
@@ -304,6 +431,17 @@ class PVTx:
         )
 
     def viscosity(self, key: List[float], x: List[float]) -> List[float]:
+        """Args:
+            key: List of primary key values the viscosity values are requested for.
+            x: List of independents the viscosity values are requested for.
+
+        Returns:
+            A list of viscosity values corresponding
+            to the given lists of primary key and independent values.
+
+        Base implementation, raises a NotImplementedError.
+
+        """
         return self.compute_quantity(
             key,
             x,
@@ -321,6 +459,23 @@ class PVTx:
         inner_function: Callable,
         outer_function: Callable,
     ) -> List[float]:
+        """Calls the evaluate method with each of the values
+        in the given primary key list and the given inner_function
+        and returns a list of the results after the outer_function
+        has been applied on each them.
+
+        Args:
+            key: List of primary key values the viscosity values are requested for.
+            x: List of independents the viscosity values are requested for.
+            inner_function: Callable for extracting a dense vector.
+            outer_function:
+                Callable that uses the dense vector to compute
+                the requested quantity.
+
+        Returns:
+            List of result values
+
+        """
         results: List[float] = []
 
         num_vals = len(key)
@@ -331,15 +486,11 @@ class PVTx:
             )
 
         for i in range(0, num_vals):
-            quantity = self.evaluate(key[i], x[i], inner_function)
+            quantity = inner_function(key[i], x[i])
 
             results.append(float(outer_function(quantity)))
 
         return results
-
-    @staticmethod
-    def evaluate(key: float, x: float, func: Callable) -> np.ndarray:
-        return func(key, x)
 
 
 class InitFileDefinitions:  # pylint: disable=too-few-public-methods
@@ -373,16 +524,35 @@ class InitFileDefinitions:  # pylint: disable=too-few-public-methods
 
 
 class EclPhaseIndex(Enum):
+    """Enumerator holding the different phases according
+    to Eclipse file conventions"""
+
     Aqua = 0
     Liquid = 1
     Vapour = 2
 
 
 def is_const_compr_index() -> int:
+    """Convenient function for better readibility.
+
+    Returns:
+        An integer that states that the oil has constant compression
+        according to Eclipse LOGIHEAD file conventions.
+    """
     return InitFileDefinitions.LOGIHEAD_CONSTANT_OILCOMPR_INDEX
 
 
 def surface_mass_density(ecl_file: EclFile, phase: EclPhaseIndex) -> List[float]:
+    """Extracts the surface mass density from the given Eclipse file for the given phase.
+
+    Args:
+        ecl_file: The Eclipse file to extract data from
+        phase: Fluid phase to extract data for
+
+    Returns:
+        List of surface mass density values.
+
+    """
     if phase is EclPhaseIndex.Liquid:
         col = 0
     elif phase is EclPhaseIndex.Aqua:
@@ -390,9 +560,6 @@ def surface_mass_density(ecl_file: EclFile, phase: EclPhaseIndex) -> List[float]
     elif phase is EclPhaseIndex.Vapour:
         col = 2
     else:
-        col = -1
-
-    if col == -1:
         raise AttributeError("Phase must be Liquid, Aqua or Vapour.")
 
     tabdims = ecl_file.__getitem__("TABDIMS")
@@ -406,36 +573,50 @@ def surface_mass_density(ecl_file: EclFile, phase: EclPhaseIndex) -> List[float]
     return rho
 
 
-class MakeInterpolants:
-    @staticmethod
-    def from_raw_data(
-        raw: EclPropertyTableRawData,
-        construct: Callable[[int, EclPropertyTableRawData], PvxOBase],
-    ) -> List[PvxOBase]:
-        interpolants: List[PvxOBase] = []
+class FluidImplementation:
+    """Base class for fluid implementations
 
-        for table_index in range(0, raw.num_tables):
-            interpolants.append(construct(table_index, raw))
+    Holds a list of regions (one per PVT table).
 
-        return interpolants
+    Attributes:
+        keep_unit_system: True if the original unit system was kept
+        original_unit_system: An ErtEclUnitEnum representing the original unit system
+    """
 
-
-class Implementation:
     class InvalidArgument(Exception):
+        """An exception for invalid arguments"""
+
         def __init__(self, message: str):
             self.message = message
             super().__init__(message)
 
     class InvalidType(Exception):
+        """An exception for invalid types"""
+
         def __init__(self) -> None:
             super().__init__("Invalid type. Only live oil/wet gas/water supported.")
 
     def __init__(self, keep_unit_system: bool = False) -> None:
+        """Initializes a fluid object.
+
+        Args:
+            keep_unit_system:
+                True if the original unit system shall be kept,
+                False if units shall be converted to SI units.
+
+        """
         self._regions: List[PvxOBase] = []
         self.keep_unit_system = keep_unit_system
         self.original_unit_system = ErtEclUnitEnum.ECL_SI_UNITS
 
     def pvdx_unit_converter(self) -> Optional[ConvertUnits]:
+        """Creates a pseudo ConvertUnits object for PVDx interpolants
+        that keeps the old unit system.
+
+        Returns:
+            Pseudo ConvertUnits object that does not do any unit conversions.
+
+        """
         if self.keep_unit_system:
             return ConvertUnits(
                 lambda x: x,
@@ -452,6 +633,14 @@ class Implementation:
     def pvtx_unit_converter(
         self,
     ) -> Optional[Tuple[Callable[[float,], float,], ConvertUnits]]:
+        """Creates a tuple consisting of a callable and a pseudo ConvertUnits
+        object for PVTx interpolants which both keep the old unit system.
+
+        Returns:
+            Tuple of callable and pseudo ConvertUnits object
+            which do not do any unit conversions.
+
+        """
         if self.keep_unit_system:
             return (
                 lambda x: x,
@@ -468,7 +657,36 @@ class Implementation:
         else:
             return None
 
+    @staticmethod
+    def make_interpolants_from_raw_data(
+        raw: EclPropertyTableRawData,
+        construct: Callable[[int, EclPropertyTableRawData], PvxOBase],
+    ) -> List[PvxOBase]:
+        """Creates a list of interpolants from raw Eclipse table data using
+        the given construct callable.
+
+        Args:
+            raw: Raw Eclise table data to create interpolants from
+            construct: Callable to use when creating interpolants
+
+        Returns:
+            A list of created interpolants.
+        """
+        interpolants: List[PvxOBase] = []
+
+        for table_index in range(0, raw.num_tables):
+            interpolants.append(construct(table_index, raw))
+
+        return interpolants
+
     def pressure_unit(self, latex: bool = False) -> str:
+        """Args:
+            latex: True if the unit symbol shall be returned as Latex, False if not.
+
+        Returns:
+            A string containing the unit symbol of pressure.
+
+        """
         unit_system = EclUnits.create_unit_system(
             self.original_unit_system
             if self.keep_unit_system
@@ -482,29 +700,83 @@ class Implementation:
     def formation_volume_factor(
         self, region_index: int, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Args:
+            region_index: Index of the requested PVT region
+            ratio: A list of ratio values the data is requested for
+            pressure: A list of pressure values the data is requested for
+
+        Returns:
+            A list of the formation volume factor values according to the given values.
+
+        """
         self.validate_region_index(region_index)
 
         return self._regions[region_index].formation_volume_factor(ratio, pressure)
 
     def formation_volume_factor_unit(self, latex: bool = False) -> str:
+        """Args:
+            latex: True if the unit symbol shall be returned as LaTeX, False if not.
+
+        Returns:
+            A string containing the unit symbol of the formation volume factor.
+
+        Raises a NotImplementedError when called on a base class object.
+
+        """
         raise NotImplementedError("This method cannot be called from the base class.")
 
     def viscosity(
         self, region_index: int, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Args:
+            region_index: Index of the requested PVT region
+            ratio: A list of ratio values the data is requested for
+            pressure: A list of pressure values the data is requested for
+
+        Returns:
+            A list of the viscosity values according to the given values.
+
+        """
         self.validate_region_index(region_index)
 
         return self._regions[region_index].viscosity(ratio, pressure)
 
     def viscosity_unit(self, latex: bool = False) -> str:
+        """Args:
+            latex: True if the unit symbol shall be returned as LaTeX, False if not.
+
+        Returns:
+            A string containing the unit symbol of the viscosity.
+
+        Raises a NotImplementedError when called on a base class object.
+
+        """
         raise NotImplementedError("This method cannot be called from the base class.")
 
     def get_region(self, region_index: int) -> PvxOBase:
+        """Validates and returns the region at the given region_index.
+
+        Args:
+            region_index: Index of the requested PVT region
+
+        Returns:
+            The fluid interpolant related to the given region index.
+
+        """
         self.validate_region_index(region_index)
 
         return self._regions[region_index]
 
     def validate_region_index(self, region_index: int) -> None:
+        """Validates the given region index by ensuring that it is not out of range.
+
+        Args:
+            region_index: Index of the region to validate
+
+        RRaises:
+            TypeError if the region is invalid.
+
+        """
         if region_index >= len(self.regions()):
             if len(self.regions()) == 0:
                 raise TypeError(
@@ -517,18 +789,34 @@ class Implementation:
             )
 
     def regions(self) -> List[PvxOBase]:
+        """Returns:
+        A list containing all interpolants (one interpolant per region)
+
+        """
         return self._regions
 
-    @staticmethod
-    def entry_valid(x: float) -> bool:
-        # Equivalent to ECLPiecewiseLinearInterpolant.hpp line 293
-        # or ECLPvtOil.cpp line 458
-        return abs(x) < 1.0e20
-
     def range_ratio(self, region_index: int) -> Tuple[float, float]:
+        """Gets the primary key (ratio) range of the PVT region with the given index.
+
+        Args:
+            region_index: Index of the requested PVT region
+
+        Returns:
+            A tuple containing the min and max primary key (ratio) values.
+
+        """
         region = self.get_region(region_index)
         return (min(region.get_keys()), max(region.get_keys()))
 
     def range_independent(self, region_index: int) -> Tuple[float, float]:
+        """Gets the independent variable range of the PVT region with the given index.
+
+        Args:
+            region_index: Index of the requested PVT region
+
+        Returns:
+            A tuple containing the min and max independent values.
+
+        """
         region = self.get_region(region_index)
         return (min(region.get_independents()), max(region.get_independents()))

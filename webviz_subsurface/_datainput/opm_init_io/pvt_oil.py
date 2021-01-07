@@ -18,8 +18,7 @@ from .pvt_common import (
     PVDx,
     PvxOBase,
     EclPropertyTableRawData,
-    Implementation,
-    MakeInterpolants,
+    FluidImplementation,
 )
 
 
@@ -157,7 +156,7 @@ class DeadOilConstCompr(PvxOBase):
         ]
 
 
-class Oil(Implementation):
+class Oil(FluidImplementation):
     def __init__(
         self,
         raw: EclPropertyTableRawData,
@@ -282,7 +281,7 @@ class Oil(Implementation):
     def create_live_oil(self, raw: EclPropertyTableRawData, unit_system: int) -> None:
         cvrt = self.live_oil_unit_converter(unit_system)
 
-        self._regions = MakeInterpolants.from_raw_data(
+        self._regions = self.make_interpolants_from_raw_data(
             # PKey   Inner   C0     C1         C2           C3
             # Rs     Po      1/B    1/(B*mu)   d(1/B)/dPo   d(1/(B*mu))/dPo
             #        :       :      :          :            :
@@ -296,14 +295,14 @@ class Oil(Implementation):
         if const_compr:
             cvrt = self.pvcdo_unit_converter(unit_system)
 
-            self._regions = MakeInterpolants.from_raw_data(
+            self._regions = self.make_interpolants_from_raw_data(
                 raw,
                 lambda table_index, raw: DeadOilConstCompr(table_index, raw, cvrt),
             )
 
         cvrt = self.dead_oil_unit_converter(unit_system)
 
-        self._regions = MakeInterpolants.from_raw_data(
+        self._regions = self.make_interpolants_from_raw_data(
             raw, lambda table_index, raw: DeadOil(table_index, raw, cvrt)
         )
 

@@ -15,8 +15,7 @@ from .pvt_common import (
     EclPhaseIndex,
     PvxOBase,
     EclPropertyTableRawData,
-    Implementation,
-    MakeInterpolants,
+    FluidImplementation,
 )
 
 
@@ -92,7 +91,7 @@ class WaterImpl(PvxOBase):
         ]
 
 
-class Water(Implementation):
+class Water(FluidImplementation):
     def __init__(
         self,
         raw: EclPropertyTableRawData,
@@ -151,7 +150,7 @@ class Water(Implementation):
 
         cvrt = self.water_unit_converter(unit_system)
 
-        ret = MakeInterpolants.from_raw_data(
+        ret = self.make_interpolants_from_raw_data(
             raw,
             lambda table_index, raw: WaterImpl(table_index, raw, cvrt),
         )

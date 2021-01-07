@@ -17,12 +17,17 @@ from .pvt_common import (
     PVDx,
     PvxOBase,
     EclPropertyTableRawData,
-    Implementation,
-    MakeInterpolants,
+    FluidImplementation,
 )
 
 
 class WetGas(PvxOBase):
+    """Class holding a PVT interpolant and access methods for PVT data from wet gas
+
+    Attributes:
+        interpolant: The interpolant object
+    """
+
     def __init__(
         self,
         index_table: int,
@@ -37,12 +42,31 @@ class WetGas(PvxOBase):
             ConvertUnits,
         ],
     ) -> None:
+        """Initializes a WetGas object.
+
+        Creates an interpolant for wet gas for the Eclipse data given
+        by the raw data in the table with the given index.
+
+        Args:
+            index_table: Index of the PVT table
+            raw: Eclipse raw data
+            convert: Tuple holding a callable and a ConvertUnits object for unit conversions
+
+        """
         PvxOBase.__init__(self)
         self.interpolant = PVTx(index_table, raw, convert)
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Args:
+            ratio: List of ratio (key) values the volume factor values are requested for.
+            pressure: List of pressure values the volume factor values are requested for.
+
+        Returns:
+            A list of all volume factor values for the given ratio and pressure values.
+
+        """
         # Remember:
         # PKey   Inner   C0     C1         C2           C3
         # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
@@ -50,6 +74,14 @@ class WetGas(PvxOBase):
         return self.interpolant.formation_volume_factor(pressure, ratio)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        """Args:
+            ratio: List of ratio (key) values the viscosity values are requested for.
+            pressure: List of pressure values the viscosity values are requested for.
+
+        Returns:
+            A list of all viscosity values for the given ratio and pressure values.
+
+        """
         # Remember:
         # PKey   Inner   C0     C1         C2           C3
         # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
@@ -57,13 +89,21 @@ class WetGas(PvxOBase):
         return self.interpolant.viscosity(pressure, ratio)
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary pressure values (Pg)"""
         return self.interpolant.get_keys()
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all gas ratio values (Rv)"""
         return self.interpolant.get_independents()
 
 
 class DryGas(PvxOBase):
+    """Class holding a PVT interpolant and access methods for PVT data from dry gas
+
+    Attributes:
+        interpolant: The interpolant object
+    """
+
     def __init__(
         self,
         table_index: int,
@@ -76,32 +116,84 @@ class DryGas(PvxOBase):
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Args:
+            ratio: List of ratio (key) values the volume factor values are requested for.
+            pressure: List of pressure values the volume factor values are requested for.
+
+        Returns:
+            A list of all volume factor values for the given ratio and pressure values.
+
+        """
         return self.interpolant.formation_volume_factor(pressure)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        """Args:
+            ratio: List of ratio (key) values the viscosity values are requested for.
+            pressure: List of pressure values the viscosity values are requested for.
+
+        Returns:
+            A list of all viscosity values for the given ratio and pressure values.
+
+        """
         return self.interpolant.viscosity(pressure)
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary keys.
+
+        Since this is dry/dead gas/oil, there is no dependency on Rv/Rs.
+        Hence, this method returns a list holding floats of value 0.0
+        for each independent value.
+
+        """
         return self.interpolant.get_keys()
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all independent pressure values (Pg)"""
         return self.interpolant.get_independents()
 
 
-class Gas(Implementation):
+class Gas(FluidImplementation):
+    """Class for storing PVT tables for gas
+
+    Holds a list of regions (one per PVT table).
+
+    Attributes:
+        surface_mass_densities: List of surface mass densities
+        keep_unit_system: True if the original unit system was kept
+        original_unit_system: An ErtEclUnitEnum representing the original unit system
+    """
+
     def __init__(
         self,
         raw: EclPropertyTableRawData,
         unit_system: int,
-        rhos: List[float],
+        surface_mass_densities: List[float],
         keep_unit_system: bool = False,
-    ):
+    ) -> None:
+        """Initializes a Gas object.
+
+        Args:
+            raw: Eclipse raw data
+            unit_system: The original unit system
+            surface_mass_densities: List of surface mass densities
+            keep_unit_system:
+                True if the original unit system shall be kept,
+                False if units shall be converted to SI units.
+
+        """
         super().__init__(keep_unit_system)
-        self.rhos = rhos
+        self.surface_mass_densities = surface_mass_densities
         self.original_unit_system = ErtEclUnitEnum(unit_system)
         self.create_pvt_function(raw, unit_system)
 
     def formation_volume_factor_unit(self, latex: bool = False) -> str:
+        """Args:
+            latex: True if the unit symbol shall be returned as LaTeX, False if not.
+
+        Returns:
+            A string containing the unit symbol of the formation volume factor.
+
+        """
         unit_system = EclUnits.create_unit_system(
             self.original_unit_system
             if self.keep_unit_system
@@ -113,6 +205,13 @@ class Gas(Implementation):
         return f"r{unit_system.reservoir_volume().symbol}/s{unit_system.surface_volume_gas().symbol}"
 
     def viscosity_unit(self, latex: bool = False) -> str:
+        """Args:
+            latex: True if the unit symbol shall be returned as LaTeX, False if not.
+
+        Returns:
+            A string containing the unit symbol of the viscosity.
+
+        """
         unit_system = EclUnits.create_unit_system(
             self.original_unit_system
             if self.keep_unit_system
@@ -186,7 +285,7 @@ class Gas(Implementation):
     def create_dry_gas(self, raw: EclPropertyTableRawData, unit_system: int) -> None:
         cvrt = self.dry_gas_unit_converter(unit_system)
 
-        self._regions = MakeInterpolants.from_raw_data(
+        self._regions = self.make_interpolants_from_raw_data(
             # Inner   C0     C1         C2           C3
             # Pg      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
             #         :       :         :            :
@@ -197,7 +296,7 @@ class Gas(Implementation):
     def create_wet_gas(self, raw: EclPropertyTableRawData, unit_system: int) -> None:
         cvrt = self.wet_gas_unit_converter(unit_system)
 
-        self._regions = MakeInterpolants.from_raw_data(
+        self._regions = self.make_interpolants_from_raw_data(
             # PKey   Inner   C0     C1         C2           C3
             # Pg     Rv      1/B    1/(B*mu)   d(1/B)/dRv   d(1/(B*mu))/dRv
             #        :       :      :          :            :
@@ -259,11 +358,13 @@ class Gas(Implementation):
         start = tab_dims[InitFileDefinitions.TABDIMS_IBPVTG_OFFSET_ITEM] - 1
         raw.data = tab[start : start + num_tab_elements]
 
-        rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Vapour)
+        surface_mass_densities = surface_mass_density(
+            ecl_init_file, EclPhaseIndex.Vapour
+        )
 
         return Gas(
             raw,
             intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
-            rhos,
+            surface_mass_densities,
             keep_unit_system,
         )
