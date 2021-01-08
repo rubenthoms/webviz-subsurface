@@ -123,6 +123,8 @@ class PvtPlot(WebvizPluginABC):
             self.phases_additional_info.append("PVTO")
         elif self.pvt_data_frame["KEYWORD"].str.contains("PVDO").any():
             self.phases_additional_info.append("PVDO")
+        elif self.pvt_data_frame["KEYWORD"].str.contains("PVCDO").any():
+            self.phases_additional_info.append("PVCDO")
         if self.pvt_data_frame["KEYWORD"].str.contains("PVTG").any():
             self.phases_additional_info.append("PVTG")
         elif self.pvt_data_frame["KEYWORD"].str.contains("PVDG").any():
@@ -357,7 +359,9 @@ class PvtPlot(WebvizPluginABC):
             elif color_by == "PVTNUM":
                 colors = self.pvtnum_colors
 
-            layout = plot_layout(phase, color_by, self.plotly_theme["layout"])
+            layout = plot_layout(
+                phase, color_by, self.plotly_theme["layout"], data_frame
+            )
 
             traces = add_realization_traces(data_frame, color_by, colors, phase)
 
@@ -481,6 +485,7 @@ def add_realization_traces(
         dim1_column_name = "PRESSURE"
     else:
         data_frame = data_frame.loc[data_frame["KEYWORD"] == "PVTW"]
+        dim1_column_name = "PRESSURE"
 
     border_value_pressure: Dict[str, list] = {}
     border_value_viscosity: Dict[str, list] = {}
@@ -692,7 +697,9 @@ def add_realization_traces(
 
 
 @CACHE.memoize(timeout=CACHE.TIMEOUT)
-def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
+def plot_layout(
+    phase: str, color_by: str, theme: dict, data_frame: pd.DataFrame
+) -> dict:
     """
     Constructing plot layout from scratch as it is more responsive than plotly subplots package.
     """
@@ -753,7 +760,10 @@ def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
                 "zeroline": False,
                 "anchor": "y2",
                 "domain": [0.0, 1.0],
-                "title": {"text": "Pressure [barsa]", "standoff": 15},
+                "title": {
+                    "text": fr"Pressure [{data_frame['PRESSURE_UNIT'].iloc[0]}]",
+                    "standoff": 15,
+                },
                 "showgrid": True,
             },
             "yaxis": {
@@ -763,8 +773,9 @@ def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
                 "anchor": "x",
                 "domain": [0.525, 1.0],
                 "title": {
-                    "text": "{} Formation Volume Factor [rm3/sm3]".format(
-                        phase.lower().capitalize()
+                    "text": (
+                        fr"{phase.lower().capitalize()} Formation Volume Factor "
+                        fr"[{data_frame['VOLUMEFACTOR_UNIT'].iloc[0]}]"
                     )
                 },
                 "type": "linear",
@@ -777,7 +788,10 @@ def plot_layout(phase: str, color_by: str, theme: dict) -> dict:
                 "anchor": "x2",
                 "domain": [0.0, 0.475],
                 "title": {
-                    "text": "{} Viscosity [cP]".format(phase.lower().capitalize())
+                    "text": (
+                        fr"{phase.lower().capitalize()} Viscosity "
+                        fr"[{data_frame['VISCOSITY_UNIT'].iloc[0]}]"
+                    )
                 },
                 "type": "linear",
                 "showgrid": True,
