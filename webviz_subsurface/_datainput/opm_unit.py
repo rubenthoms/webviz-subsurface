@@ -45,9 +45,11 @@ def unit_system_name(unit_system: ErtEclUnitEnum) -> str:
 
 
 class UnitSystems:
+    # pylint: disable=too-few-public-methods
     """Namespace for unit systems"""
 
     class SI:
+        # pylint: disable=too-few-public-methods
         """Namespace for SI unit system"""
 
         Pressure = Unit.Pascal
@@ -73,6 +75,7 @@ class UnitSystems:
         Energy = Unit.joule
 
     class Metric:
+        # pylint: disable=too-few-public-methods
         """Namespace for metric unit system"""
 
         Pressure = Unit.barsa
@@ -100,6 +103,7 @@ class UnitSystems:
         Energy = Prefix.kilo * Unit.joule
 
     class Field:
+        # pylint: disable=too-few-public-methods
         """Namespace for field unit system"""
 
         Pressure = Unit.psia
@@ -125,6 +129,7 @@ class UnitSystems:
         Energy = Unit.btu
 
     class Lab:
+        # pylint: disable=too-few-public-methods
         """Namespace for lab unit system"""
 
         Pressure = Unit.atm
@@ -155,6 +160,7 @@ class UnitSystems:
         Energy = Unit.joule
 
     class PVTM:
+        # pylint: disable=too-few-public-methods
         """Namespace for PVTM unit system"""
 
         Pressure = Unit.atm
@@ -616,6 +622,14 @@ class CreateUnitConverter:
 
     class ToSI:
         @staticmethod
+        def fvf(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                CreateUnitConverter.fvf_scale(unit_system)
+            )
+
+        @staticmethod
         def density(
             unit_system: EclUnits.UnitSystem,
         ) -> Callable[[float,], float]:
@@ -637,6 +651,14 @@ class CreateUnitConverter:
         ) -> Callable[[float,], float]:
             return CreateUnitConverter.create_converter_to_SI(
                 1.0 / unit_system.pressure().value
+            )
+
+        @staticmethod
+        def viscosity(
+            unit_system: EclUnits.UnitSystem,
+        ) -> Callable[[float,], float]:
+            return CreateUnitConverter.create_converter_to_SI(
+                unit_system.viscosity().value
             )
 
         @staticmethod

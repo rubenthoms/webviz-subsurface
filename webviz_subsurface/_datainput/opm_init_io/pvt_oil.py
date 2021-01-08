@@ -5,10 +5,11 @@
 ########################################
 
 from typing import Tuple, Callable, List, Any, Union, Optional
+from math import exp
 
 from opm.io.ecl import EclFile
 
-from ..opm_unit import ConvertUnits, EclUnits, Unit, CreateUnitConverter, ErtEclUnitEnum
+from ..opm_unit import ConvertUnits, EclUnits, CreateUnitConverter, ErtEclUnitEnum
 from .pvt_common import (
     is_const_compr_index,
     surface_mass_density,
@@ -23,6 +24,12 @@ from .pvt_common import (
 
 
 class LiveOil(PvxOBase):
+    """Class holding a PVT interpolant and access methods for PVT data for live oil
+
+    Attributes:
+        interpolant: The interpolant object
+    """
+
     def __init__(
         self,
         index_table: int,
@@ -37,107 +44,258 @@ class LiveOil(PvxOBase):
             ConvertUnits,
         ],
     ) -> None:
-        PvxOBase.__init__(self)
+        # pylint: disable=super-init-not-called
+        """Initializes a LiveOil object.
+
+        Creates an interpolant for live oil for the Eclipse data given
+        by the raw data in the table with the given index.
+
+        Args:
+            index_table: Index of the PVT table
+            raw: Eclipse raw data object
+            convert: Tuple holding a callable and a ConvertUnits object for unit conversions
+
+        """
         self.interpolant = PVTx(index_table, raw, convert)
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Args:
+            ratio: List of ratio (key) values the volume factor values are requested for.
+            pressure: List of pressure values the volume factor values are requested for.
+
+        Returns:
+            A list of all volume factor values for the given ratio and pressure values.
+
+        """
         return self.interpolant.formation_volume_factor(ratio, pressure)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        """Args:
+            ratio: List of ratio (key) values the viscosity values are requested for.
+            pressure: List of pressure values the viscosity values are requested for.
+
+        Returns:
+            A list of all viscosity values for the given ratio and pressure values.
+
+        """
         return self.interpolant.viscosity(ratio, pressure)
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary key values (Rs)"""
         return self.interpolant.get_keys()
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all independent pressure values (Po)"""
         return self.interpolant.get_independents()
 
 
 class DeadOil(PvxOBase):
+    """Class holding a PVT interpolant and access methods for PVT data for dead oil
+
+    Attributes:
+        interpolant: The interpolant object
+    """
+
     def __init__(
         self,
         table_index: int,
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
     ) -> None:
-        PvxOBase.__init__(self)
+        # pylint: disable=super-init-not-called
+        """Initializes a DeadOil object.
+
+        Creates an interpolant for dead oil for the Eclipse data given
+        by the raw data in the table with the given index.
+
+        Args:
+            index_table: Index of the PVT table
+            raw: Eclipse raw data object
+            convert: ConvertUnits object for unit conversions
+
+        """
         self.interpolant = PVDx(table_index, raw, convert)
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Args:
+            ratio: Dummy argument, only to conform to interface of base class.
+            pressure: List of pressure values the volume factor values are requested for.
+
+        Returns:
+            A list of all volume factor values for the given pressure values.
+
+        """
         return self.interpolant.formation_volume_factor(pressure)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        """Args:
+            ratio: Dummy argument, only to conform to interface of base class.
+            pressure: List of pressure values the viscosity values are requested for.
+
+        Returns:
+            A list of all viscosity values for the given pressure values.
+
+        """
         return self.interpolant.viscosity(pressure)
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary keys.
+
+        Since this is dead oil, there is no dependency on Rs.
+        Hence, this method returns a list holding floats of value 0.0
+        for each independent value.
+
+        """
         return self.interpolant.get_keys()
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all independent pressure values (Po)"""
         return self.interpolant.get_independents()
 
 
 class DeadOilConstCompr(PvxOBase):
+    """Class holding a PVT interpolant and access methods for PVT data
+    for dead oil with constant compressibility"""
+
     def __init__(
         self,
         index_table: int,
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
     ) -> None:
-        PvxOBase.__init__(self)
+        # pylint: disable=super-init-not-called
+        """Initializes a DeadOilConstCompr object.
 
-        self.rhos = 0.0
+        Creates an interpolant for dead oil with constant compressibility for the Eclipse data given
+        by the raw data in the table with the given index.
+
+        Args:
+            index_table: Index of the PVT table
+            raw: Eclipse raw data
+            convert: Tuple holding a callable and a ConvertUnits object for unit conversions
+
+        Raises:
+            ValueError in case of an invalid reference oil pressure
+        """
+        self.__surface_mass_density = 0.0
 
         column_stride = raw.num_rows * raw.num_tables * raw.num_primary
         table_stride = raw.num_primary * raw.num_rows
         current_stride = index_table * table_stride
 
-        self.fvf = convert.column[0](raw.data[0 * column_stride + current_stride])  # Bo
-        self.c_o = convert.column[1](raw.data[1 * column_stride + current_stride])  # Co
-        self.visc = convert.column[2](
+        self.__fvf_ref = convert.column[0](
+            raw.data[0 * column_stride + current_stride]
+        )  # Bo
+        self.__c_o_ref = convert.column[1](
+            raw.data[1 * column_stride + current_stride]
+        )  # Co
+        self.__visc_ref = convert.column[2](
             raw.data[2 * column_stride + current_stride]
         )  # mu_o
-        self.c_v = convert.column[3](raw.data[3 * column_stride + current_stride])  # Cv
+        self.__c_v_ref = convert.column[3](
+            raw.data[3 * column_stride + current_stride]
+        )  # Cv
 
-        self.p_o_ref = convert.independent(raw.data[current_stride])
+        self.__p_o_ref = convert.independent(raw.data[current_stride])
 
-        if abs(self.p_o_ref) < 1.0e20:
+        if abs(self.__p_o_ref) < 1.0e20:
             raise ValueError("Invalid Input PVCDO Table")
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
+        """Computes a list of formation volume factor values
+        for the given pressure values.
+
+        Args:
+            ratio: Dummy argument, only to conform to interface of base class
+            pressure: List of pressure values
+
+        Returns:
+            A list of all formation volume factor values for the given pressure values.
+
+        """
         return self.__evaluate(pressure, lambda p: 1.0 / self.__recip_fvf(p))
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
+        """Computes a list of viscosity values for the given pressure values.
+
+        Args:
+            ratio: Dummy argument, only to conform to interface of base class
+            pressure: List of pressure values
+
+        Returns:
+            A list of viscosity values corresponding
+            to the given list of pressure values.
+
+        """
         return self.__evaluate(
             pressure, lambda p: self.__recip_fvf(p) / self.__recip_fvf_visc(p)
         )
 
     def __recip_fvf(self, p_o: float) -> float:
-        x = self.c_o * (p_o - self.p_o_ref)
+        """Computes the reciproke of the formation volume factor for the given oil pressure.
 
-        return self.__exp(x) / self.fvf
+        Args:
+            p_o: Oil pressure
+
+        Returns:
+            Reciproke of the formation volume factor
+
+        """
+
+        # See Eclipse Reference Manual, p. 1748
+        # B_o(P) = B_o(P_ref) * e^-x
+        # x = C * (P - P_ref)
+        # 1 / B_o(P) = 1 / B_o(P_ref) * e^x
+
+        x = self.__c_o_ref * (p_o - self.__p_o_ref)
+
+        return exp(x) / self.__fvf_ref
 
     def surface_mass_density(self) -> float:
-        return self.rhos
+        """Returns: the surface mass density"""
+        return self.__surface_mass_density
 
     def __recip_fvf_visc(self, p_o: float) -> float:
-        y = (self.c_o - self.c_v) * (p_o - self.p_o_ref)
+        """Computes the reciproke of the product of formation volume factor
+        and viscosity for the given oil pressure.
 
-        return self.__exp(y) / (self.fvf * self.visc)
+        Args:
+            p_o: Oil pressure
 
-    @staticmethod
-    def __exp(x: float) -> float:
-        return 1.0 + x * (1.0 + x / 2.0)
+        Returns:
+            Reciproke of the product of formation volume factor and viscosity
+
+        """
+
+        # See Eclipse Reference Manual, p. 1748
+        # mu_o(P) * B_o(P) = B_o(P_ref) * mu_o(P_ref) * e^-y
+        # y = (C - C_v) * (P - P_ref)
+        # 1 / (mu_o(P) * B_o(P)) = 1 / (B_o(P_ref) * mu_o(P_ref)) * e^y
+        y = (self.__c_o_ref - self.__c_v_ref) * (p_o - self.__p_o_ref)
+
+        return exp(y) / (self.__fvf_ref * self.__visc_ref)
 
     @staticmethod
     def __evaluate(
         pressures: List[float], calculate: Callable[[Any], Any]
     ) -> List[float]:
+        """Calls the calculate method with each of the values
+        in the pressures list and returns the results.
+
+        Args:
+            pressures: List of pressure values
+            calculate: Method to be called with each of the pressure values
+
+        Returns:
+            List of result values
+
+        """
         quantities: List[float] = []
 
         for pressure in pressures:
@@ -146,31 +304,73 @@ class DeadOilConstCompr(PvxOBase):
         return quantities
 
     def get_keys(self) -> List[float]:
+        """Returns a list of all primary keys.
+
+        Since this is dead oil, there is no dependency on any ratio.
+        Hence, this method returns a list holding a single float of value 0.0.
+
+        """
         return [
             0.0,
         ]
 
     def get_independents(self) -> List[float]:
+        """Returns a list of all independent pressure values (Po).
+
+        Since this is water, this does return with only one single pressure value,
+        the reference pressure.
+        """
         return [
-            self.p_o_ref,
+            self.__p_o_ref,
         ]
 
 
 class Oil(FluidImplementation):
+    """Class for storing PVT tables for oil
+
+    Holds a list of regions (one per PVT table).
+
+    Attributes:
+        surface_mass_densities: List of surface mass densities
+        keep_unit_system: True if the original unit system was kept
+        original_unit_system: An ErtEclUnitEnum representing the original unit system
+    """
+
     def __init__(
         self,
         raw: EclPropertyTableRawData,
         unit_system: int,
         is_const_compr: bool,
-        rhos: List[float],
+        surface_mass_densities: List[float],
         keep_unit_system: bool = False,
     ):
+        """Initializes an Oil object.
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: The original unit system
+            is_const_compr: True if oil has constant compressibility, else False
+            surface_mass_densities: List of surface mass densities
+            keep_unit_system:
+                True if the original unit system shall be kept,
+                False if units shall be converted to SI units.
+
+        """
         super().__init__(keep_unit_system)
-        self.rhos = rhos
+        self.surface_mass_densities = surface_mass_densities
         self.original_unit_system = ErtEclUnitEnum(unit_system)
-        self.create_pvt_function(raw, is_const_compr, unit_system)
+        self.create_pvt_interpolants(raw, is_const_compr, unit_system)
 
     def formation_volume_factor_unit(self, latex: bool = False) -> str:
+        """Creates and returns a string containing the unit symbol of the formation volume factor.
+
+        Args:
+            latex: True if the unit symbol shall be returned as LaTeX, False if not.
+
+        Returns:
+            A string containing the unit symbol of the formation volume factor.
+
+        """
         unit_system = EclUnits.create_unit_system(
             self.original_unit_system
             if self.keep_unit_system
@@ -178,10 +378,25 @@ class Oil(FluidImplementation):
         )
 
         if latex:
-            return fr"${{r{unit_system.reservoir_volume().symbol}}}/{{s{unit_system.surface_volume_liquid().symbol}}}$"
-        return f"r{unit_system.reservoir_volume().symbol}/s{unit_system.surface_volume_liquid().symbol}"
+            return (
+                fr"${{r{unit_system.reservoir_volume().symbol}}}/"
+                fr"{{s{unit_system.surface_volume_liquid().symbol}}}$"
+            )
+        return (
+            f"r{unit_system.reservoir_volume().symbol}/"
+            f"s{unit_system.surface_volume_liquid().symbol}"
+        )
 
     def viscosity_unit(self, latex: bool = False) -> str:
+        """Creates and returns a string containing the unit symbol of the viscosity.
+
+        Args:
+            latex: True if the unit symbol shall be returned as LaTeX, False if not.
+
+        Returns:
+            A string containing the unit symbol of the viscosity.
+
+        """
         unit_system = EclUnits.create_unit_system(
             self.original_unit_system
             if self.keep_unit_system
@@ -192,28 +407,20 @@ class Oil(FluidImplementation):
             return fr"${unit_system.viscosity().symbol}$"
         return f"{unit_system.viscosity().symbol}"
 
-    @staticmethod
-    def _formation_volume_factor(
-        unit_system: EclUnits.UnitSystem,
-    ) -> Callable[[float,], float]:
-        scale = (
-            unit_system.reservoir_volume().value
-            / unit_system.surface_volume_liquid().value
-        )
-
-        return lambda x: Unit.Convert.from_(x, scale)
-
-    @staticmethod
-    def _viscosity(
-        unit_system: EclUnits.UnitSystem,
-    ) -> Callable[[float,], float]:
-        scale = unit_system.viscosity().value
-
-        return lambda x: Unit.Convert.from_(x, scale)
-
     def dead_oil_unit_converter(
         self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
+        """Creates a ConvertUnits object for unit conversions for dead oil.
+
+        Args:
+            unit_system:
+                Either an integer or an enum
+                describing the unit system the units are stored in
+
+        Returns:
+            ConvertUnits object for unit conversions.
+
+        """
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
@@ -230,15 +437,27 @@ class Oil(FluidImplementation):
     def pvcdo_unit_converter(
         self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
+        """Creates a ConvertUnits object for unit conversions
+        for dead oil with constant compressibility.
+
+        Args:
+            unit_system:
+                Either an integer or an enum
+                describing the unit system the units are stored in
+
+        Returns:
+            ConvertUnits object for unit conversions.
+
+        """
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
         return super().pvdx_unit_converter() or ConvertUnits(
             CreateUnitConverter.ToSI.pressure(unit_system),
             [
-                Oil._formation_volume_factor(unit_system),
+                CreateUnitConverter.ToSI.fvf(unit_system),
                 CreateUnitConverter.ToSI.compressibility(unit_system),
-                Oil._viscosity(unit_system),
+                CreateUnitConverter.ToSI.viscosity(unit_system),
                 CreateUnitConverter.ToSI.compressibility(unit_system),
             ],
         )
@@ -246,6 +465,18 @@ class Oil(FluidImplementation):
     def live_oil_unit_converter(
         self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
+        """Creates a tuple consisting of a callable and a ConvertUnits object
+        for unit conversions for live oil.
+
+        Args:
+            unit_system:
+                Either an integer or an enum
+                describing the unit system the units are stored in
+
+        Returns:
+            Tuple consisting of callable and ConvertUnits object
+
+        """
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
@@ -254,10 +485,21 @@ class Oil(FluidImplementation):
             self.dead_oil_unit_converter(unit_system),
         )
 
-    # pylint: disable=unused-argument
-    def create_pvt_function(
+    def create_pvt_interpolants(
         self, raw: EclPropertyTableRawData, is_const_compr: bool, unit_system: int
     ) -> None:
+        """Creates interpolants for PVT data based on the type of the oil
+        (i.e. live, dead and dead with constant compressibility).
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: Number describing the unit system the values in the raw data are stored in
+
+        Raises:
+            A FluidImplementation.InvalidArgument exception
+            in case of a size mismatch in the raw data.
+
+        """
         if raw.num_primary == 0:
             raise super().InvalidArgument("Oil PVT table without primary lookup key")
         if raw.num_cols != 5:
@@ -279,6 +521,14 @@ class Oil(FluidImplementation):
         self.create_live_oil(raw, unit_system)
 
     def create_live_oil(self, raw: EclPropertyTableRawData, unit_system: int) -> None:
+        """Creates interpolants for live oil from the given raw Eclipse data and uses
+        a live oil unit converter based on the given unit system.
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: Integer representation of the unit system used in Eclipse data
+
+        """
         cvrt = self.live_oil_unit_converter(unit_system)
 
         self._regions = self.make_interpolants_from_raw_data(
@@ -292,6 +542,15 @@ class Oil(FluidImplementation):
     def create_dead_oil(
         self, raw: EclPropertyTableRawData, const_compr: bool, unit_system: int
     ) -> None:
+        """Creates interpolants for dead oil (with and without constant compressibility)
+        from the given raw Eclipse data and uses a dead oil (or pvcdo) unit converter
+        based on the given unit system.
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: Integer representation of the unit system used in Eclipse data
+
+        """
         if const_compr:
             cvrt = self.pvcdo_unit_converter(unit_system)
 
@@ -299,6 +558,7 @@ class Oil(FluidImplementation):
                 raw,
                 lambda table_index, raw: DeadOilConstCompr(table_index, raw, cvrt),
             )
+            return
 
         cvrt = self.dead_oil_unit_converter(unit_system)
 
@@ -307,16 +567,34 @@ class Oil(FluidImplementation):
         )
 
     def is_live_oil(self) -> bool:
+        """Checks if this fluid is live oil.
+
+        Returns:
+            True if live oil, else False
+
+        """
         if len(self._regions) > 0:
             return isinstance(self._regions[0], LiveOil)
         return False
 
     def is_dead_oil(self) -> bool:
+        """Checks if this fluid is dead oil with variable compressibility.
+
+        Returns:
+            True if dead oil with variable compressibility, else False
+
+        """
         if len(self._regions) > 0:
             return isinstance(self._regions[0], DeadOil)
         return False
 
     def is_dead_oil_const_compr(self) -> bool:
+        """Checks if this fluid is dead oil with constant compressibility.
+
+        Returns:
+            True if dead oil with constant compressibility, else False
+
+        """
         if len(self._regions) > 0:
             return isinstance(self._regions[0], DeadOilConstCompr)
         return False
@@ -325,6 +603,18 @@ class Oil(FluidImplementation):
     def from_ecl_init_file(
         ecl_init_file: EclFile, keep_unit_system: bool = False
     ) -> Optional["Oil"]:
+        """Reads the given Eclipse file and creates an Oil object from its data.
+
+        Args:
+            ecl_init_file: Eclipse INIT file
+            keep_unit_system:
+                Set to True if the unit system used in the Eclipse file
+                shall be kept, False if SI shall be used.
+
+        Returns:
+            An Oil object or None if the data in the Eclipse file was invalid
+
+        """
         intehead = ecl_init_file.__getitem__(InitFileDefinitions.INTEHEAD_KW)
 
         logihead = ecl_init_file.__getitem__(InitFileDefinitions.LOGIHEAD_KW)
@@ -362,12 +652,14 @@ class Oil(FluidImplementation):
         start = tab_dims[InitFileDefinitions.TABDIMS_IBPVTO_OFFSET_ITEM] - 1
         raw.data = tab[start : start + num_tab_elements]
 
-        rhos = surface_mass_density(ecl_init_file, EclPhaseIndex.Liquid)
+        surface_mass_densities = surface_mass_density(
+            ecl_init_file, EclPhaseIndex.Liquid
+        )
 
         return Oil(
             raw,
             intehead[InitFileDefinitions.INTEHEAD_UNIT_INDEX],
             is_is_const_compr,
-            rhos,
+            surface_mass_densities,
             keep_unit_system,
         )

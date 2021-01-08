@@ -273,7 +273,8 @@ class Unit:
             self,
             other: Union[UnitBase, Prefix.Base, float, int],
         ) -> UnitBase:
-            """Multiplies this unit with the given unit/float/int and returns the result as a new unit.
+            """Multiplies this unit with the given unit/float/int and
+            returns the result as a new unit.
 
             Does also create a new symbol.
 

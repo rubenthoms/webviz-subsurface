@@ -17,7 +17,6 @@ from webviz_config.common_cache import CACHE
 from webviz_config import WebvizPluginABC
 
 from .._datainput.pvt_data import load_pvt_dataframe, load_pvt_csv
-from .._datainput.opm_unit import unit_system_name, ErtEclUnitEnum
 
 
 class PvtPlot(WebvizPluginABC):
@@ -170,15 +169,6 @@ class PvtPlot(WebvizPluginABC):
     def color_options(self) -> List[str]:
         """Options to color by"""
         return ["ENSEMBLE", "PVTNUM"]
-
-    @property
-    def unit_systems(self) -> Dict[int, str]:
-        return dict(
-            [
-                (ErtEclUnitEnum(i), unit_system_name(ErtEclUnitEnum(i)))
-                for i in range(1, 5)
-            ]
-        )
 
     @property
     def tour_steps(self) -> List[dict]:
@@ -783,7 +773,10 @@ def plot_layout(
                 "anchor": "x",
                 "domain": [0.525, 1.0],
                 "title": {
-                    "text": fr"{phase.lower().capitalize()} Formation Volume Factor [{data_frame['VOLUMEFACTOR_UNIT'].iloc[0]}]"
+                    "text": (
+                        fr"{phase.lower().capitalize()} Formation Volume Factor "
+                        fr"[{data_frame['VOLUMEFACTOR_UNIT'].iloc[0]}]"
+                    )
                 },
                 "type": "linear",
                 "showgrid": True,
@@ -795,7 +788,10 @@ def plot_layout(
                 "anchor": "x2",
                 "domain": [0.0, 0.475],
                 "title": {
-                    "text": fr"{phase.lower().capitalize()} Viscosity [{data_frame['VISCOSITY_UNIT'].iloc[0]}]"
+                    "text": (
+                        fr"{phase.lower().capitalize()} Viscosity "
+                        fr"[{data_frame['VISCOSITY_UNIT'].iloc[0]}]"
+                    )
                 },
                 "type": "linear",
                 "showgrid": True,

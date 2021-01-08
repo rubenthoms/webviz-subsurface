@@ -22,7 +22,7 @@ from .pvt_common import (
 
 
 class WetGas(PvxOBase):
-    """Class holding a PVT interpolant and access methods for PVT data from wet gas
+    """Class holding a PVT interpolant and access methods for PVT data for wet gas
 
     Attributes:
         interpolant: The interpolant object
@@ -42,6 +42,7 @@ class WetGas(PvxOBase):
             ConvertUnits,
         ],
     ) -> None:
+        # pylint: disable=super-init-not-called
         """Initializes a WetGas object.
 
         Creates an interpolant for wet gas for the Eclipse data given
@@ -49,17 +50,19 @@ class WetGas(PvxOBase):
 
         Args:
             index_table: Index of the PVT table
-            raw: Eclipse raw data
+            raw: Eclipse raw data object
             convert: Tuple holding a callable and a ConvertUnits object for unit conversions
 
         """
-        PvxOBase.__init__(self)
         self.interpolant = PVTx(index_table, raw, convert)
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
-        """Args:
+        """Computes a list of formation volume factor values
+        for the given ratio and pressure values.
+
+        Args:
             ratio: List of ratio (key) values the volume factor values are requested for.
             pressure: List of pressure values the volume factor values are requested for.
 
@@ -74,7 +77,9 @@ class WetGas(PvxOBase):
         return self.interpolant.formation_volume_factor(pressure, ratio)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
-        """Args:
+        """Computes a list of viscosity values for the given ratio and pressure values.
+
+        Args:
             ratio: List of ratio (key) values the viscosity values are requested for.
             pressure: List of pressure values the viscosity values are requested for.
 
@@ -98,7 +103,7 @@ class WetGas(PvxOBase):
 
 
 class DryGas(PvxOBase):
-    """Class holding a PVT interpolant and access methods for PVT data from dry gas
+    """Class holding a PVT interpolant and access methods for PVT data for dry gas
 
     Attributes:
         interpolant: The interpolant object
@@ -110,29 +115,45 @@ class DryGas(PvxOBase):
         raw: EclPropertyTableRawData,
         convert: ConvertUnits,
     ) -> None:
-        PvxOBase.__init__(self)
+        # pylint: disable=super-init-not-called
+        """Initializes a DryGas object.
+
+        Creates an interpolant for dry gas for the Eclipse data given
+        by the raw data in the table with the given index.
+
+        Args:
+            index_table: Index of the PVT table
+            raw: Eclipse raw data object
+            convert: ConvertUnits object for unit conversions
+
+        """
         self.interpolant = PVDx(table_index, raw, convert)
 
     def formation_volume_factor(
         self, ratio: List[float], pressure: List[float]
     ) -> List[float]:
-        """Args:
-            ratio: List of ratio (key) values the volume factor values are requested for.
+        """Computes a list of formation volume factor values
+        for the given pressure values.
+
+        Args:
+            ratio: Dummy argument, only to conform to interface of base class.
             pressure: List of pressure values the volume factor values are requested for.
 
         Returns:
-            A list of all volume factor values for the given ratio and pressure values.
+            A list of all volume factor values for the given pressure values.
 
         """
         return self.interpolant.formation_volume_factor(pressure)
 
     def viscosity(self, ratio: List[float], pressure: List[float]) -> List[float]:
-        """Args:
-            ratio: List of ratio (key) values the viscosity values are requested for.
+        """Computes a list of viscosity values for the given pressure values.
+
+        Args:
+            ratio: Dummy argument, only to conform to interface of base class.
             pressure: List of pressure values the viscosity values are requested for.
 
         Returns:
-            A list of all viscosity values for the given ratio and pressure values.
+            A list of all viscosity values for the given pressure values.
 
         """
         return self.interpolant.viscosity(pressure)
@@ -140,7 +161,7 @@ class DryGas(PvxOBase):
     def get_keys(self) -> List[float]:
         """Returns a list of all primary keys.
 
-        Since this is dry/dead gas/oil, there is no dependency on Rv/Rs.
+        Since this is dry gas, there is no dependency on Rv.
         Hence, this method returns a list holding floats of value 0.0
         for each independent value.
 
@@ -173,7 +194,7 @@ class Gas(FluidImplementation):
         """Initializes a Gas object.
 
         Args:
-            raw: Eclipse raw data
+            raw: Eclipse raw data object
             unit_system: The original unit system
             surface_mass_densities: List of surface mass densities
             keep_unit_system:
@@ -184,10 +205,12 @@ class Gas(FluidImplementation):
         super().__init__(keep_unit_system)
         self.surface_mass_densities = surface_mass_densities
         self.original_unit_system = ErtEclUnitEnum(unit_system)
-        self.create_pvt_function(raw, unit_system)
+        self.create_pvt_interpolants(raw, unit_system)
 
     def formation_volume_factor_unit(self, latex: bool = False) -> str:
-        """Args:
+        """Creates and returns a string containing the unit symbol of the formation volume factor.
+
+        Args:
             latex: True if the unit symbol shall be returned as LaTeX, False if not.
 
         Returns:
@@ -201,11 +224,19 @@ class Gas(FluidImplementation):
         )
 
         if latex:
-            return fr"${{r{unit_system.reservoir_volume().symbol}}}/{{s{unit_system.surface_volume_gas().symbol}}}$"
-        return f"r{unit_system.reservoir_volume().symbol}/s{unit_system.surface_volume_gas().symbol}"
+            return (
+                fr"${{r{unit_system.reservoir_volume().symbol}}}"
+                fr"/{{s{unit_system.surface_volume_gas().symbol}}}$"
+            )
+        return (
+            f"r{unit_system.reservoir_volume().symbol}"
+            f"/s{unit_system.surface_volume_gas().symbol}"
+        )
 
     def viscosity_unit(self, latex: bool = False) -> str:
-        """Args:
+        """Creates and returns a string containing the unit symbol of the viscosity.
+
+        Args:
             latex: True if the unit symbol shall be returned as LaTeX, False if not.
 
         Returns:
@@ -222,9 +253,20 @@ class Gas(FluidImplementation):
             return fr"${unit_system.viscosity().symbol}$"
         return f"{unit_system.viscosity().symbol}"
 
-    def create_pvt_function(
+    def create_pvt_interpolants(
         self, raw: EclPropertyTableRawData, unit_system: int
     ) -> None:
+        """Creates interpolants for PVT data based on the type of the gas (i.e. dry or wet gas).
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: Number describing the unit system the values in the raw data are stored in
+
+        Raises:
+            A FluidImplementation.InvalidArgument exception
+            in case of a size mismatch in the raw data.
+
+        """
         if raw.num_primary == 0:
             raise super().InvalidArgument("Gas PVT table without primary lookup key")
         if raw.num_cols != 5:
@@ -248,6 +290,17 @@ class Gas(FluidImplementation):
     def dry_gas_unit_converter(
         self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> ConvertUnits:
+        """Creates a ConvertUnits object for unit conversions for dry gas.
+
+        Args:
+            unit_system:
+                Either an integer or an enum
+                describing the unit system the units are stored in
+
+        Returns:
+            ConvertUnits object for unit conversions.
+
+        """
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
@@ -264,6 +317,18 @@ class Gas(FluidImplementation):
     def wet_gas_unit_converter(
         self, unit_system: Union[int, EclUnits.UnitSystem]
     ) -> Tuple[Callable[[float,], float,], ConvertUnits]:
+        """Creates a tuple consisting of a callable and a ConvertUnits object
+        for unit conversions for wet gas.
+
+        Args:
+            unit_system:
+                Either an integer or an enum
+                describing the unit system the units are stored in
+
+        Returns:
+            Tuple consisting of callable and ConvertUnits object
+
+        """
         if not isinstance(unit_system, EclUnits.UnitSystem):
             unit_system = EclUnits.create_unit_system(unit_system)
 
@@ -283,6 +348,14 @@ class Gas(FluidImplementation):
         )
 
     def create_dry_gas(self, raw: EclPropertyTableRawData, unit_system: int) -> None:
+        """Creates interpolants for dry gas from the given raw Eclipse data and uses
+        a dry gas unit converter based on the given unit system.
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: Integer representation of the unit system used in Eclipse data
+
+        """
         cvrt = self.dry_gas_unit_converter(unit_system)
 
         self._regions = self.make_interpolants_from_raw_data(
@@ -294,6 +367,14 @@ class Gas(FluidImplementation):
         )
 
     def create_wet_gas(self, raw: EclPropertyTableRawData, unit_system: int) -> None:
+        """Creates interpolants for wet gas from the given raw Eclipse data and uses
+        a wet gas unit converter based on the given unit system.
+
+        Args:
+            raw: Eclipse raw data object
+            unit_system: Integer representation of the unit system used in Eclipse data
+
+        """
         cvrt = self.wet_gas_unit_converter(unit_system)
 
         self._regions = self.make_interpolants_from_raw_data(
@@ -305,11 +386,23 @@ class Gas(FluidImplementation):
         )
 
     def is_wet_gas(self) -> bool:
+        """Checks if this fluid is wet gas.
+
+        Returns:
+            True if wet gas, else False
+
+        """
         if len(self._regions) > 0:
             return isinstance(self._regions[0], WetGas)
         return False
 
     def is_dry_gas(self) -> bool:
+        """Checks if this fluid is dry gas.
+
+        Returns:
+            True if dry gas, else False
+
+        """
         if len(self._regions) > 0:
             return isinstance(self._regions[0], DryGas)
         return False
@@ -318,6 +411,18 @@ class Gas(FluidImplementation):
     def from_ecl_init_file(
         ecl_init_file: EclFile, keep_unit_system: bool = False
     ) -> Optional["Gas"]:
+        """Reads the given Eclipse file and creates a Gas object from its data.
+
+        Args:
+            ecl_init_file: Eclipse INIT file
+            keep_unit_system:
+                Set to True if the unit system used in the Eclipse file
+                shall be kept, False if SI shall be used.
+
+        Returns:
+            A Gas object or None if the data in the Eclipse file was invalid
+
+        """
         intehead = ecl_init_file.__getitem__(InitFileDefinitions.INTEHEAD_KW)
         intehead_phase = intehead[InitFileDefinitions.INTEHEAD_PHASE_INDEX]
 

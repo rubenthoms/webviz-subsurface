@@ -99,10 +99,9 @@ def extrap1d(interpolator: interpolate.interp1d) -> Callable[[float], np.ndarray
     def pointwise(x: float) -> np.ndarray:
         if x < x_s[0]:
             return y_s[0] + (x - x_s[0]) * (y_s[1] - y_s[0]) / (x_s[1] - x_s[0])
-        elif x > x_s[-1]:
+        if x > x_s[-1]:
             return y_s[-1] + (x - x_s[-1]) * (y_s[-1] - y_s[-2]) / (x_s[-1] - x_s[-2])
-        else:
-            return interpolator(x)
+        return interpolator(x)
 
     def ufunclike(x_s: float) -> np.ndarray:
         return np.ndarray(list(map(pointwise, np.ndarray(x_s))))
@@ -238,7 +237,10 @@ class PVDx(PVxx):
         return self.x
 
     def formation_volume_factor(self, pressure: List[float]) -> List[float]:
-        """Args:
+        """Computes a list of formation volume factor values
+        for the given pressure values.
+
+        Args:
             pressure: List of pressure values the volume factors are requested for.
 
         Returns:
@@ -252,7 +254,9 @@ class PVDx(PVxx):
         return self.compute_quantity(pressure, lambda p: 1.0 / self.fvf_recip(p))
 
     def viscosity(self, pressure: List[float]) -> List[float]:
-        """Args:
+        """Computes a list of viscosity values for the given pressure values.
+
+        Args:
             pressure: List of pressure values the viscosity values are requested for.
 
         Returns:
@@ -411,7 +415,10 @@ class PVTx(PVxx):
         return self.x
 
     def formation_volume_factor(self, key: List[float], x: List[float]) -> List[float]:
-        """Args:
+        """Computes a list of formation volume factor values
+        for the given ratio and pressure values.
+
+        Args:
             key: List of primary key values the volume factors are requested for.
             x: List of independents the volume factors are requested for.
 
@@ -431,7 +438,9 @@ class PVTx(PVxx):
         )
 
     def viscosity(self, key: List[float], x: List[float]) -> List[float]:
-        """Args:
+        """Computes a list of viscosity values for the given ratio and pressure values.
+
+        Args:
             key: List of primary key values the viscosity values are requested for.
             x: List of independents the viscosity values are requested for.
 
@@ -452,8 +461,8 @@ class PVTx(PVxx):
             lambda dense_vector: dense_vector[0] / dense_vector[1],
         )
 
+    @staticmethod
     def compute_quantity(
-        self,
         key: List[float],
         x: List[float],
         inner_function: Callable,
@@ -627,8 +636,7 @@ class FluidImplementation:
                     lambda x: x,
                 ],
             )
-        else:
-            return None
+        return None
 
     def pvtx_unit_converter(
         self,
@@ -654,8 +662,7 @@ class FluidImplementation:
                     ],
                 ),
             )
-        else:
-            return None
+        return None
 
     @staticmethod
     def make_interpolants_from_raw_data(

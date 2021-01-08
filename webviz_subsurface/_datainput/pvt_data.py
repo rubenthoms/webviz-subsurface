@@ -37,7 +37,7 @@ from .opm_init_io.pvt_water import Water
 def filter_pvt_data_frame(
     data_frame: pd.DataFrame, drop_ensemble_duplicates: bool = False
 ) -> pd.DataFrame:
-
+    # pylint: disable=too-many-branches
     data_frame = data_frame.rename(str.upper, axis="columns").rename(
         columns={
             "TYPE": "KEYWORD",
@@ -70,11 +70,11 @@ def filter_pvt_data_frame(
     ]
 
     if not "VOLUMEFACTOR_UNIT" in data_frame.columns:
-        data_frame["VOLUMEFACTOR_UNIT"] = r"$rm^3/{sm^3}$"
+        data_frame["VOLUMEFACTOR_UNIT"] = "rm^3/sm^3"
     if not "PRESSURE_UNIT" in data_frame.columns:
-        data_frame["PRESSURE_UNIT"] = r"$bar$"
+        data_frame["PRESSURE_UNIT"] = "bar"
     if not "VISCOSITY_UNIT" in data_frame.columns:
-        data_frame["VISCOSITY_UNIT"] = r"$cP$"
+        data_frame["VISCOSITY_UNIT"] = "cP"
 
     data_frame = data_frame[columns]
 
