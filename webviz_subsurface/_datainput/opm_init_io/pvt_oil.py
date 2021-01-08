@@ -5,7 +5,6 @@
 ########################################
 
 from typing import Tuple, Callable, List, Any, Union, Optional
-from math import exp
 
 from opm.io.ecl import EclFile
 
@@ -255,7 +254,7 @@ class DeadOilConstCompr(PvxOBase):
 
         x = self.__c_o_ref * (p_o - self.__p_o_ref)
 
-        return exp(x) / self.__fvf_ref
+        return self.__exp(x) / self.__fvf_ref
 
     def surface_mass_density(self) -> float:
         """Returns: the surface mass density"""
@@ -279,7 +278,24 @@ class DeadOilConstCompr(PvxOBase):
         # 1 / (mu_o(P) * B_o(P)) = 1 / (B_o(P_ref) * mu_o(P_ref)) * e^y
         y = (self.__c_o_ref - self.__c_v_ref) * (p_o - self.__p_o_ref)
 
-        return exp(y) / (self.__fvf_ref * self.__visc_ref)
+        return self.__exp(y) / (self.__fvf_ref * self.__visc_ref)
+
+    @staticmethod
+    def __exp(x: float) -> float:
+        """Internal helper function.
+
+        Computes the exponential denominator of Eq. 3.150 and
+        Eq. 3.151, Eclipse Reference Manual (p. 1748) as a part
+        of a Taylor series.
+
+        Args:
+            x: Expression to use (see manual)
+
+        Returns:
+            Polynomial denominator of equations
+
+        """
+        return 1.0 + x * (1.0 + x / 2.0)
 
     @staticmethod
     def __evaluate(
