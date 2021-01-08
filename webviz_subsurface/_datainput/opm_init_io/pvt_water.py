@@ -76,7 +76,7 @@ class WaterImpl(PvxOBase):
 
         x = self.__c_w_ref * (p_w - self.__pw_ref)
 
-        return self.__recip_fvf_ref * self.__compute_polynomial(x)
+        return self.__recip_fvf_ref * self.__exp(x)
 
     def __recip_fvf_visc(self, p_w: float) -> float:
         """Computes the reciproke of the product of formation volume factor
@@ -98,7 +98,7 @@ class WaterImpl(PvxOBase):
 
         y = self.__diff_cw_cv_ref * (p_w - self.__pw_ref)
 
-        return self.__recip_fvf_visc_ref * self.__compute_polynomial(y)
+        return self.__recip_fvf_visc_ref * self.__exp(y)
 
     @staticmethod
     def __evaluate(
@@ -123,11 +123,12 @@ class WaterImpl(PvxOBase):
         return quantities
 
     @staticmethod
-    def __compute_polynomial(x: float) -> float:
+    def __exp(x: float) -> float:
         """Internal helper function.
 
-        Computes the polynomial denominator of Eq. 3.155 and
-        Eq. 3.156, Eclipse Reference Manual (p. 1762).
+        Computes the exponential denominator of Eq. 3.155 and
+        Eq. 3.156, Eclipse Reference Manual (p. 1762) as a part
+        of a Taylor series.
 
         Args:
             x: Expression to use (see manual)
