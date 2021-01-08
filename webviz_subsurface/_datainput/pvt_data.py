@@ -69,6 +69,10 @@ def filter_pvt_data_frame(
         "VISCOSITY_UNIT",
     ]
 
+    if not "RATIO" in data_frame.columns:
+        raise ValueError(
+            "The dataframe must contain a column for the ratio (OGR, GOR, R, RV, RS)."
+        )
     if not "VOLUMEFACTOR_UNIT" in data_frame.columns:
         data_frame["VOLUMEFACTOR_UNIT"] = "rm^3/sm^3"
     if not "PRESSURE_UNIT" in data_frame.columns:

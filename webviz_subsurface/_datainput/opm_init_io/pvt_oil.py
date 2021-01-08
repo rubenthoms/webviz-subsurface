@@ -650,8 +650,6 @@ class Oil(FluidImplementation):
         if raw.num_tables == 0:
             return None
 
-        # If there is no Rs index, no gas is dissolved in the oil -> dead oil
-        # Otherwise, gas is dissolved and the ratio is given -> live oil
         if logihead[InitFileDefinitions.LOGIHEAD_RS_INDEX]:
             raw.num_primary = num_rs
 
