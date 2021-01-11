@@ -487,6 +487,11 @@ def add_realization_traces(
         data_frame = data_frame.loc[data_frame["KEYWORD"] == "PVTW"]
         dim1_column_name = "PRESSURE"
 
+    data_frame = data_frame.sort_values(
+        ["PRESSURE", "VOLUMEFACTOR", "VISCOSITY"],
+        ascending=[True, True, True],
+    )
+
     border_value_pressure: Dict[str, list] = {}
     border_value_viscosity: Dict[str, list] = {}
     border_value_volumefactor: Dict[str, list] = {}
@@ -518,11 +523,18 @@ def add_realization_traces(
                             realization_data_frame[dim1_column_name] == set_value
                         ]["VOLUMEFACTOR"].iloc[0]
                     )
-                    border_value_viscosity[group].append(
-                        realization_data_frame.loc[
-                            realization_data_frame[dim1_column_name] == set_value
-                        ]["VISCOSITY"].iloc[0]
-                    )
+                    if phase == "OIL":
+                        border_value_viscosity[group].append(
+                            realization_data_frame[
+                                (realization_data_frame[dim1_column_name] == set_value)
+                            ]["VISCOSITY"].iloc[0]
+                        )
+                    else:
+                        border_value_viscosity[group].append(
+                            realization_data_frame[
+                                (realization_data_frame[dim1_column_name] == set_value)
+                            ]["VISCOSITY"].max()
+                        )
                 except IndexError as exc:
                     raise IndexError(
                         "This error is most likely due to PVT differences between "
