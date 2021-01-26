@@ -48,15 +48,15 @@ class BhpQc(WebvizPluginABC):
         else:
             self.column_keys = [f"WBHP:{well}" for well in wells]
 
-        self.emodel = EnsembleSetModel(
+        self.emodel = EnsembleSetModel.get_or_create_model(
             ensemble_paths={
                 ens: webviz_settings.shared_settings["scratch_ensembles"][ens]
                 for ens in ensembles
-            }
+            },
+            time_index="raw",
+            column_keys=self.column_keys,
         )
-        self.smry = self.emodel.load_smry(
-            time_index="raw", column_keys=self.column_keys
-        )
+        self.smry = self.emodel.get_smry_df()
         self.theme = webviz_settings.theme
         self.set_callbacks(app)
 

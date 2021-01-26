@@ -97,11 +97,13 @@ slow for large models.
         self.csvfile_smry = csvfile_smry
 
         if ensembles is not None:
-            self.emodel = EnsembleSetModel(
+            self.emodel = EnsembleSetModel.get_or_create_model(
                 ensemble_paths={
                     ens: webviz_settings.shared_settings["scratch_ensembles"][ens]
                     for ens in ensembles
-                }
+                },
+                time_index=self.time_index,
+                column_keys=self.column_keys,
             )
             self.pmodel = ParametersModel(
                 dataframe=self.emodel.load_parameters(),
@@ -109,9 +111,7 @@ slow for large models.
                 drop_constants=drop_constants,
             )
             self.vmodel = SimulationTimeSeriesModel(
-                dataframe=self.emodel.load_smry(
-                    time_index=self.time_index, column_keys=self.column_keys
-                ),
+                dataframe=self.emodel.get_smry_df(),
                 theme=self.theme,
             )
 

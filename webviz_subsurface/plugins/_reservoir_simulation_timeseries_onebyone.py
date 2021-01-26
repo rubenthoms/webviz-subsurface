@@ -159,14 +159,15 @@ folder, to avoid risk of not extracting the right data.
                 ensemble: webviz_settings.shared_settings["scratch_ensembles"][ensemble]
                 for ensemble in ensembles
             }
-            self.emodel = EnsembleSetModel(ensemble_paths=self.ens_paths)
-            smry = self.emodel.load_smry(
-                time_index=self.time_index, column_keys=self.column_keys
-            )
-
-            self.smry_meta = self.emodel.load_smry_meta(
+            self.emodel = EnsembleSetModel.get_or_create_model(
+                ensemble_paths=self.ens_paths,
+                time_index=self.time_index,
                 column_keys=self.column_keys,
             )
+            smry = self.emodel.get_smry_df()
+
+            self.smry_meta = self.emodel.get_smry_meta_df()
+
             # Extract realizations and sensitivity information
             parameters = get_realizations(
                 ensemble_paths=self.ens_paths, ensemble_set_name="EnsembleSet"

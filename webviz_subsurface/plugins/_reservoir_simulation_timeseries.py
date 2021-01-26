@@ -166,19 +166,17 @@ folder, to avoid risk of not extracting the right data.
                 sorted(pd.to_datetime(self.smry["DATE"]).unique())
             )
         elif ensembles:
-            self.emodel = EnsembleSetModel(
+            self.emodel = EnsembleSetModel.get_or_create_model(
                 ensemble_paths={
                     ens: webviz_settings.shared_settings["scratch_ensembles"][ens]
                     for ens in ensembles
-                }
-            )
-            self.smry = self.emodel.load_smry(
-                time_index=self.time_index, column_keys=self.column_keys
-            )
-
-            self.smry_meta = self.emodel.load_smry_meta(
+                },
+                time_index=self.time_index,
                 column_keys=self.column_keys,
             )
+            self.smry = self.emodel.get_smry_df()
+
+            self.smry_meta = self.emodel.get_smry_meta_df()
         else:
             raise ValueError(
                 'Incorrent arguments. Either provide a "csvfile" or "ensembles"'

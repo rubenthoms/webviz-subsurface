@@ -109,11 +109,13 @@ folder, to avoid risk of not extracting the right data.
         self.surface_folders: Union[dict, None]
 
         if ensembles is not None:
-            self.emodel = EnsembleSetModel(
+            self.emodel = EnsembleSetModel.get_or_create_model(
                 ensemble_paths={
                     ens: webviz_settings.shared_settings["scratch_ensembles"][ens]
                     for ens in ensembles
-                }
+                },
+                time_index=self.time_index,
+                column_keys=self.column_keys,
             )
             self.pmodel = PropertyStatisticsModel(
                 dataframe=self.emodel.load_csv(
@@ -122,9 +124,7 @@ folder, to avoid risk of not extracting the right data.
                 theme=self.theme,
             )
             self.vmodel = SimulationTimeSeriesModel(
-                dataframe=self.emodel.load_smry(
-                    time_index=self.time_index, column_keys=self.column_keys
-                ),
+                dataframe=self.emodel.get_smry_df(),
                 theme=self.theme,
             )
             self.surface_folders = {

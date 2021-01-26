@@ -137,19 +137,17 @@ folder, to avoid risk of not extracting the right data.
                 "'monthly' or 'yearly', as the statistics require the same dates throughout an"
                 "ensemble."
             )
-        self.emodel = EnsembleSetModel(
+        self.emodel = EnsembleSetModel.get_or_create_model(
             ensemble_paths={
                 ens: webviz_settings.shared_settings["scratch_ensembles"][ens]
                 for ens in ensembles
-            }
-        )
-        self.smry = self.emodel.load_smry(
-            time_index=self.time_index, column_keys=self.column_keys
-        )
-
-        self.smry_meta = self.emodel.load_smry_meta(
+            },
+            time_index=self.time_index,
             column_keys=self.column_keys,
         )
+        self.smry = self.emodel.get_smry_df()
+
+        self.smry_meta = self.emodel.get_smry_meta_df()
         self.field_totals = [
             col for col in self.smry.columns if fnmatch.fnmatch(col, "F[OWG]PT")
         ]
@@ -163,7 +161,7 @@ folder, to avoid risk of not extracting the right data.
                 ]
             )
         else:
-            total_smry = self.emodel.load_smry(
+            total_smry = self.emodel.load_additional_smry_df(
                 time_index=self.time_index,
                 column_keys=["F[OWG]PT"],
             )

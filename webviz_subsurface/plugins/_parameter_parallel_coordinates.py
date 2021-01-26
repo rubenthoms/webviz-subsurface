@@ -185,20 +185,22 @@ folder, to avoid risk of not extracting the right data.
                     'Incorrect arguments. Either provide "response_csv" or '
                     '"ensembles and/or response_file".'
                 )
-            self.emodel = EnsembleSetModel(
+            self.emodel = EnsembleSetModel.get_or_create_model(
                 ensemble_paths={
                     ens: webviz_settings.shared_settings["scratch_ensembles"][ens]
                     for ens in ensembles
-                }
+                },
+                time_index=self.time_index,
+                column_keys=self.column_keys,
             )
             self.parameterdf = self.emodel.load_parameters()
+            # !!!!!!
+            # Note conditional loading of summary data!!!!
             if not self.no_responses:
                 if self.response_file:
                     self.responsedf = self.emodel.load_csv(csv_file=response_file)
                 else:
-                    self.responsedf = self.emodel.load_smry(
-                        time_index=self.time_index, column_keys=self.column_keys
-                    )
+                    self.responsedf = self.emodel.get_smry_df()
                     self.response_filters["DATE"] = "single"
         else:
             raise ValueError(

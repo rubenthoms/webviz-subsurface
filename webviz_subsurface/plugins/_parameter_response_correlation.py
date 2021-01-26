@@ -175,7 +175,11 @@ folder, to avoid risk of not extracting the right data.
                     ensemble_set_name="EnsembleSet",
                 )
             else:
-                self.emodel = EnsembleSetModel(ensemble_paths=self.ens_paths)
+                self.emodel = EnsembleSetModel.get_or_create_model(
+                    ensemble_paths=self.ens_paths,
+                    column_keys=self.column_keys,
+                    time_index=self.time_index,
+                )
                 self.responsedf = self.emodel.load_smry(
                     column_keys=self.column_keys,
                     time_index=self.time_index,
